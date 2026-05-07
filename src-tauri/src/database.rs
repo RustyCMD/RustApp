@@ -70,6 +70,10 @@ impl Db {
                 );
                 "#,
             )?;
+            // Idempotent forward-migrations for users who created the DB on
+            // an older schema. SQLite returns a "duplicate column name"
+            // error when the column already exists; that's our success case.
+            add_column_if_missing(c, "server_profiles", "notes", "TEXT")?;
             Ok(())
         })
     }
@@ -85,41 +89,58 @@ impl Db {
             rcon_port: input.rcon_port,
             rcon_password: input.rcon_password,
             server_directory: input.server_directory,
+            notes: input.notes.filter(|s| !s.is_empty()),
             created_at: now,
             updated_at: now,
         };
+        self.insert_profile_full(&profile)?;
+        Ok(profile)
+    }
+
+    /// Insert a fully-formed profile (id + timestamps already set). Used by
+    /// the import path so we keep timestamps from the source machine.
+    pub fn insert_profile_full(&self, p: &ServerProfile) -> Result<()> {
         self.with(|c| {
             c.execute(
                 r#"INSERT INTO server_profiles
                    (id, name, ip_address, rcon_port, rcon_password,
-                    server_directory, created_at, updated_at)
-                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"#,
+                    server_directory, notes, created_at, updated_at)
+                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                   ON CONFLICT(id) DO UPDATE SET
+                     name=excluded.name,
+                     ip_address=excluded.ip_address,
+                     rcon_port=excluded.rcon_port,
+                     rcon_password=excluded.rcon_password,
+                     server_directory=excluded.server_directory,
+                     notes=excluded.notes,
+                     updated_at=excluded.updated_at"#,
                 params![
-                    profile.id,
-                    profile.name,
-                    profile.ip_address,
-                    profile.rcon_port,
-                    profile.rcon_password,
-                    profile.server_directory,
-                    profile.created_at.to_rfc3339(),
-                    profile.updated_at.to_rfc3339(),
+                    p.id,
+                    p.name,
+                    p.ip_address,
+                    p.rcon_port,
+                    p.rcon_password,
+                    p.server_directory,
+                    p.notes,
+                    p.created_at.to_rfc3339(),
+                    p.updated_at.to_rfc3339(),
                 ],
             )?;
             Ok(())
-        })?;
-        Ok(profile)
+        })
     }
 
     pub fn update_profile(&self, profile: ServerProfile) -> Result<ServerProfile> {
         let updated = ServerProfile {
             updated_at: Utc::now(),
+            notes: profile.notes.filter(|s| !s.is_empty()),
             ..profile
         };
         let rows = self.with(|c| {
             c.execute(
                 r#"UPDATE server_profiles
                    SET name=?2, ip_address=?3, rcon_port=?4, rcon_password=?5,
-                       server_directory=?6, updated_at=?7
+                       server_directory=?6, notes=?7, updated_at=?8
                    WHERE id=?1"#,
                 params![
                     updated.id,
@@ -128,6 +149,7 @@ impl Db {
                     updated.rcon_port,
                     updated.rcon_password,
                     updated.server_directory,
+                    updated.notes,
                     updated.updated_at.to_rfc3339(),
                 ],
             )
@@ -154,7 +176,7 @@ impl Db {
         self.with(|c| {
             let mut stmt = c.prepare(
                 r#"SELECT id, name, ip_address, rcon_port, rcon_password,
-                          server_directory, created_at, updated_at
+                          server_directory, notes, created_at, updated_at
                    FROM server_profiles
                    ORDER BY name COLLATE NOCASE ASC"#,
             )?;
@@ -170,7 +192,7 @@ impl Db {
             let p = c
                 .query_row(
                     r#"SELECT id, name, ip_address, rcon_port, rcon_password,
-                              server_directory, created_at, updated_at
+                              server_directory, notes, created_at, updated_at
                        FROM server_profiles WHERE id=?1"#,
                     params![id],
                     row_to_profile,
@@ -260,9 +282,31 @@ fn row_to_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<ServerProfile> {
         rcon_port: row.get::<_, i64>(3)? as u16,
         rcon_password: row.get(4)?,
         server_directory: row.get(5)?,
-        created_at: parse_dt(&row.get::<_, String>(6)?),
-        updated_at: parse_dt(&row.get::<_, String>(7)?),
+        notes: row.get(6)?,
+        created_at: parse_dt(&row.get::<_, String>(7)?),
+        updated_at: parse_dt(&row.get::<_, String>(8)?),
     })
+}
+
+/// `ALTER TABLE … ADD COLUMN` is non-idempotent in SQLite — calling twice
+/// returns "duplicate column name", which we swallow so first-run upgrades
+/// from an older schema are seamless.
+fn add_column_if_missing(
+    c: &Connection,
+    table: &str,
+    column: &str,
+    type_decl: &str,
+) -> Result<()> {
+    let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {type_decl}");
+    match c.execute(&sql, []) {
+        Ok(_) => Ok(()),
+        Err(rusqlite::Error::SqliteFailure(_, Some(msg)))
+            if msg.contains("duplicate column name") =>
+        {
+            Ok(())
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 fn row_to_meta(row: &rusqlite::Row<'_>) -> rusqlite::Result<PluginMetaData> {

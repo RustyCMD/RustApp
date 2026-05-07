@@ -16,6 +16,7 @@ import type {
   PluginUpdateInfo,
   RconCommandResult,
   RconTestResult,
+  SavedCommand,
   ServerProfile,
   ServerProfileInput,
   ServerStatus,
@@ -95,6 +96,18 @@ export const savePluginConfig = (
 export const listConfigBackups = (profileId: string, pluginName: string) =>
   invoke<ConfigBackup[]>("list_config_backups", { profileId, pluginName });
 
+export const readConfigBackup = (
+  profileId: string,
+  pluginName: string,
+  fileName: string,
+) => invoke<string>("read_config_backup", { profileId, pluginName, fileName });
+
+export const restoreConfigBackup = (
+  profileId: string,
+  pluginName: string,
+  fileName: string,
+) => invoke<void>("restore_config_backup", { profileId, pluginName, fileName });
+
 // ---------- Plugin store ----------
 
 export const fetchUmodPlugins = (page: number, search?: string) =>
@@ -123,3 +136,22 @@ export const listActivity = (limit?: number) =>
   invoke<ActivityEntry[]>("list_activity", { limit });
 
 export const clearActivity = () => invoke<void>("clear_activity");
+
+// ---------- Saved RCON commands ----------
+
+export const listSavedCommands = (profileId: string) =>
+  invoke<SavedCommand[]>("list_saved_commands", { profileId });
+
+export const addSavedCommand = (profileId: string, label: string, command: string) =>
+  invoke<SavedCommand>("add_saved_command", { profileId, label, command });
+
+export const deleteSavedCommand = (id: number) =>
+  invoke<void>("delete_saved_command", { id });
+
+// ---------- Profile import / export ----------
+
+export const exportProfilesToPath = (path: string) =>
+  invoke<number>("export_profiles_to_path", { path });
+
+export const importProfilesFromPath = (path: string) =>
+  invoke<number>("import_profiles_from_path", { path });

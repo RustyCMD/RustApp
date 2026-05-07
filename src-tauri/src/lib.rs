@@ -11,6 +11,7 @@ mod error;
 mod models;
 mod plugins;
 mod rcon;
+mod saved_commands;
 mod umod_scraper;
 mod utils;
 
@@ -38,6 +39,7 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             let db = Db::open(&data_dir.join("rustapp.sqlite"))?;
             activity::migrate(&db)?;
+            saved_commands::migrate(&db)?;
             app.manage(db);
             Ok(())
         })
@@ -62,6 +64,8 @@ pub fn run() {
             commands::load_plugin_config,
             commands::save_plugin_config,
             commands::list_config_backups,
+            commands::read_config_backup,
+            commands::restore_config_backup,
             // store
             commands::fetch_umod_plugins,
             commands::list_cached_umod_plugins,
@@ -73,6 +77,13 @@ pub fn run() {
             // activity log
             commands::list_activity,
             commands::clear_activity,
+            // saved RCON commands
+            commands::list_saved_commands,
+            commands::add_saved_command,
+            commands::delete_saved_command,
+            // profile import/export
+            commands::export_profiles_to_path,
+            commands::import_profiles_from_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

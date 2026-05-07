@@ -4,6 +4,7 @@ import { sendRconCommand } from "@/api/tauriCommands";
 import { useSelectedProfile } from "@/state/serverStore";
 import { useToast } from "@/components/Toast";
 import EmptyState from "@/components/EmptyState";
+import SavedCommands from "@/components/SavedCommands";
 
 type Line =
   | { kind: "system"; text: string; ts: number }
@@ -124,6 +125,11 @@ export default function ConsolePage() {
       </div>
 
       <div className="card" style={{ padding: 16 }}>
+        <SavedCommands
+          profileId={profile.id}
+          currentInput={input}
+          onPick={(cmd) => setInput(cmd)}
+        />
         <div className="console" ref={scrollRef}>
           {lines.length === 0 ? (
             <div className="line system">// Try: serverinfo, playerlist, oxide.plugins, banlistex</div>

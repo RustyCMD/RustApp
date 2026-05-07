@@ -87,6 +87,46 @@ async fn prune_backups(
     Ok(())
 }
 
+/// Read a previous snapshot back into memory so the frontend can preview
+/// it before deciding to restore. We resolve `file_name` against the
+/// backups dir explicitly so the caller can't read arbitrary files by
+/// passing a path with `..`.
+pub async fn read_backup(
+    server_dir: &str,
+    plugin_name: &str,
+    file_name: &str,
+) -> Result<String> {
+    validate_plugin_name(plugin_name)?;
+    let backups = config_dir(server_dir).join(".rustapp-backups");
+    let candidate = backups.join(file_name);
+    let canon_dir = fs::canonicalize(&backups).await?;
+    let canon_file = fs::canonicalize(&candidate)
+        .await
+        .map_err(|_| AppError::not_found(format!("backup {file_name} not found")))?;
+    if !canon_file.starts_with(&canon_dir) {
+        return Err(AppError::invalid_input("backup path escapes backups dir"));
+    }
+    let content = fs::read_to_string(&canon_file).await?;
+    Ok(content)
+}
+
+/// Replace the live config with the contents of an existing backup, after
+/// taking a fresh backup of the current state (so a restore is itself
+/// undo-able). Returns the restored path.
+pub async fn restore_backup(
+    server_dir: &str,
+    plugin_name: &str,
+    file_name: &str,
+) -> Result<PathBuf> {
+    let content = read_backup(server_dir, plugin_name, file_name).await?;
+    let kind = if file_name.ends_with(".ini") {
+        ConfigKind::Ini
+    } else {
+        ConfigKind::Json
+    };
+    save(server_dir, plugin_name, kind, &content).await
+}
+
 pub async fn list_backups(
     server_dir: &str,
     plugin_name: &str,

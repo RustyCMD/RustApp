@@ -14,10 +14,12 @@ use crate::error::{AppError, Result};
 use crate::models::{
     BulkUpdateFailure, BulkUpdateResult, ConfigBackup, ConfigKind, DependencyStatus,
     InstalledPlugin, PlayerInfo, PluginMetaData, PluginStorePage, PluginUpdateInfo,
-    RconCommandResult, RconTestResult, ServerProfile, ServerProfileInput, ServerStatus,
+    ProfileExport, RconCommandResult, RconTestResult, SavedCommand, ServerProfile,
+    ServerProfileInput, ServerStatus,
 };
 use crate::plugins;
 use crate::rcon;
+use crate::saved_commands;
 use crate::umod_scraper;
 use crate::utils;
 
@@ -259,6 +261,37 @@ pub async fn list_config_backups(
     config_files::list_backups(&p.server_directory, &plugin_name).await
 }
 
+#[tauri::command]
+pub async fn read_config_backup(
+    db: State<'_, Db>,
+    profile_id: String,
+    plugin_name: String,
+    file_name: String,
+) -> Result<String> {
+    let p = require_profile(&db, &profile_id)?;
+    config_files::read_backup(&p.server_directory, &plugin_name, &file_name).await
+}
+
+#[tauri::command]
+pub async fn restore_config_backup(
+    db: State<'_, Db>,
+    profile_id: String,
+    plugin_name: String,
+    file_name: String,
+) -> Result<()> {
+    let p = require_profile(&db, &profile_id)?;
+    config_files::restore_backup(&p.server_directory, &plugin_name, &file_name).await?;
+    let _ = activity::record(
+        &db,
+        Some(&profile_id),
+        "config.restore",
+        Some(&plugin_name),
+        ActivityStatus::Ok,
+        Some(&format!("from {file_name}")),
+    );
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 //  Plugin store / install
 // ---------------------------------------------------------------------------
@@ -449,6 +482,97 @@ pub fn list_activity(db: State<'_, Db>, limit: Option<u32>) -> Result<Vec<Activi
 #[tauri::command]
 pub fn clear_activity(db: State<'_, Db>) -> Result<()> {
     activity::clear(&db)
+}
+
+// ---------------------------------------------------------------------------
+//  Saved RCON commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_saved_commands(
+    db: State<'_, Db>,
+    profile_id: String,
+) -> Result<Vec<SavedCommand>> {
+    // Make sure the profile exists so frontend errors are descriptive.
+    require_profile(&db, &profile_id)?;
+    saved_commands::list(&db, &profile_id)
+}
+
+#[tauri::command]
+pub fn add_saved_command(
+    db: State<'_, Db>,
+    profile_id: String,
+    label: String,
+    command: String,
+) -> Result<SavedCommand> {
+    let label = label.trim();
+    let command = command.trim();
+    if label.is_empty() {
+        return Err(AppError::invalid_input("label is required"));
+    }
+    if command.is_empty() {
+        return Err(AppError::invalid_input("command is required"));
+    }
+    require_profile(&db, &profile_id)?;
+    saved_commands::add(&db, &profile_id, label, command)
+}
+
+#[tauri::command]
+pub fn delete_saved_command(db: State<'_, Db>, id: i64) -> Result<()> {
+    saved_commands::delete(&db, id)
+}
+
+// ---------------------------------------------------------------------------
+//  Profile import / export
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn export_profiles_to_path(db: State<'_, Db>, path: String) -> Result<u32> {
+    let profiles = db.get_all_profiles()?;
+    let count = profiles.len() as u32;
+    let payload = ProfileExport {
+        version: ProfileExport::CURRENT_VERSION,
+        exported_at: chrono::Utc::now(),
+        profiles,
+    };
+    let json = serde_json::to_string_pretty(&payload)?;
+    tokio::fs::write(&path, json).await?;
+    let _ = activity::record(
+        &db,
+        None,
+        "profiles.export",
+        Some(&path),
+        ActivityStatus::Ok,
+        Some(&format!("{count} profile(s)")),
+    );
+    Ok(count)
+}
+
+#[tauri::command]
+pub async fn import_profiles_from_path(db: State<'_, Db>, path: String) -> Result<u32> {
+    let body = tokio::fs::read_to_string(&path).await?;
+    let payload: ProfileExport = serde_json::from_str(&body).map_err(|e| {
+        AppError::invalid_input(format!("export file is not valid JSON: {e}"))
+    })?;
+    if payload.version > ProfileExport::CURRENT_VERSION {
+        return Err(AppError::invalid_input(format!(
+            "export was written by a newer version of RustApp ({}); upgrade and try again",
+            payload.version
+        )));
+    }
+    let count = payload.profiles.len() as u32;
+    for profile in &payload.profiles {
+        db.insert_profile_full(profile)?;
+    }
+    let _ = activity::record(
+        &db,
+        None,
+        "profiles.import",
+        Some(&path),
+        ActivityStatus::Ok,
+        Some(&format!("{count} profile(s)")),
+    );
+    Ok(count)
 }
 
 // ---------------------------------------------------------------------------

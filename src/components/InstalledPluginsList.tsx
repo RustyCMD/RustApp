@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, RefreshCw, Search, Sparkles } from "lucide-react";
+import {
+  Boxes,
+  CheckSquare,
+  Power,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Square,
+  Trash2,
+} from "lucide-react";
 import {
   checkForPluginUpdates,
+  disablePlugin,
+  enablePlugin,
   getInstalledPlugins,
+  reloadPlugin,
+  uninstallPlugin,
   updateAllPlugins,
 } from "@/api/tauriCommands";
 import { useToast } from "@/components/Toast";
@@ -29,6 +42,7 @@ export default function InstalledPluginsList({
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<InstalledPlugin | null>(null);
   const [bulkRunning, setBulkRunning] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
     setPlugins(null);
@@ -45,7 +59,6 @@ export default function InstalledPluginsList({
     try {
       const ups = await checkForPluginUpdates(profileId);
       setUpdates(new Set(ups.map((u) => u.pluginName)));
-      // Mirror into the global store so the sidebar badge stays correct.
       updateStore.refresh(profileId);
     } catch {
       // best-effort
@@ -56,6 +69,17 @@ export default function InstalledPluginsList({
     reload();
     refreshUpdates();
   }, [reload, refreshUpdates]);
+
+  // Drop selections that no longer correspond to a visible plugin (e.g. after a refresh).
+  useEffect(() => {
+    if (!plugins) return;
+    setSelected((prev) => {
+      const valid = new Set(plugins.map((p) => p.name));
+      const next = new Set<string>();
+      prev.forEach((n) => valid.has(n) && next.add(n));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [plugins]);
 
   const filtered = useMemo(() => {
     if (!plugins) return null;
@@ -70,6 +94,66 @@ export default function InstalledPluginsList({
       return true;
     });
   }, [plugins, search, filter, updates]);
+
+  function toggle(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    if (!filtered) return;
+    setSelected((prev) => {
+      const visibleNames = filtered.map((p) => p.name);
+      const allSelected = visibleNames.every((n) => prev.has(n));
+      const next = new Set(prev);
+      if (allSelected) visibleNames.forEach((n) => next.delete(n));
+      else visibleNames.forEach((n) => next.add(n));
+      return next;
+    });
+  }
+
+  /** Run `op` on every selected plugin sequentially. Collected failures are
+      surfaced in one toast, not one per row. */
+  async function bulk(label: string, op: (name: string) => Promise<unknown>) {
+    if (selected.size === 0) return;
+    setBulkRunning(true);
+    let ok = 0;
+    const failures: Array<[string, string]> = [];
+    for (const name of Array.from(selected)) {
+      try {
+        await op(name);
+        ok++;
+      } catch (e) {
+        failures.push([name, String(e)]);
+      }
+    }
+    setBulkRunning(false);
+    if (failures.length === 0) {
+      toast.push(`${label} ${ok} plugin${ok === 1 ? "" : "s"}`, "ok");
+    } else {
+      toast.push(
+        `${label} ${ok} ok, ${failures.length} failed: ${failures
+          .map(([n]) => n)
+          .join(", ")}`,
+        ok > 0 ? "info" : "error",
+      );
+    }
+    setSelected(new Set());
+    reload();
+    refreshUpdates();
+  }
+
+  async function bulkUninstall() {
+    const n = selected.size;
+    const choice = window.confirm(
+      `Uninstall ${n} plugin${n === 1 ? "" : "s"}?\n\nOK = also delete config files\nCancel = keep configs (the uninstall still proceeds)`,
+    );
+    bulk("Uninstalled", (name) => uninstallPlugin(profileId, name, choice));
+  }
 
   async function onUpdateAll() {
     if (updates.size === 0) {
@@ -105,6 +189,11 @@ export default function InstalledPluginsList({
       updates: updates.size,
     };
   }, [plugins, updates]);
+
+  const allVisibleSelected =
+    !!filtered && filtered.length > 0 && filtered.every((p) => selected.has(p.name));
+  const someVisibleSelected =
+    !!filtered && filtered.some((p) => selected.has(p.name));
 
   return (
     <div>
@@ -153,6 +242,49 @@ export default function InstalledPluginsList({
         </div>
       </div>
 
+      {selected.size > 0 && (
+        <div
+          className="card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "10px 14px",
+            marginBottom: 12,
+            borderColor: "var(--accent-strong)",
+          }}
+        >
+          <strong>{selected.size}</strong>
+          <span className="muted small">selected</span>
+          <div className="row" style={{ gap: 6, marginLeft: "auto" }}>
+            <button
+              disabled={bulkRunning}
+              onClick={() => bulk("Enabled", (n) => enablePlugin(profileId, n))}
+            >
+              <Power size={14} color="var(--ok)" /> Enable
+            </button>
+            <button
+              disabled={bulkRunning}
+              onClick={() => bulk("Disabled", (n) => disablePlugin(profileId, n))}
+            >
+              <Power size={14} /> Disable
+            </button>
+            <button
+              disabled={bulkRunning}
+              onClick={() => bulk("Reloaded", (n) => reloadPlugin(profileId, n))}
+            >
+              <RefreshCw size={14} /> Reload
+            </button>
+            <button disabled={bulkRunning} className="danger" onClick={bulkUninstall}>
+              <Trash2 size={14} /> Uninstall
+            </button>
+            <button className="ghost" onClick={() => setSelected(new Set())}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {plugins === null ? (
         <div className="card stack">
           {[0, 1, 2, 3].map((i) => (
@@ -186,6 +318,22 @@ export default function InstalledPluginsList({
           <table>
             <thead>
               <tr>
+                <th style={{ width: 36 }}>
+                  <button
+                    className="ghost icon"
+                    title={allVisibleSelected ? "Clear selection" : "Select all visible"}
+                    onClick={toggleAllVisible}
+                    style={{ padding: 4 }}
+                  >
+                    {allVisibleSelected ? (
+                      <CheckSquare size={16} color="var(--accent)" />
+                    ) : someVisibleSelected ? (
+                      <CheckSquare size={16} color="var(--text-muted)" />
+                    ) : (
+                      <Square size={16} />
+                    )}
+                  </button>
+                </th>
                 <th>Plugin</th>
                 <th>Author</th>
                 <th>Version</th>
@@ -200,6 +348,8 @@ export default function InstalledPluginsList({
                   profileId={profileId}
                   plugin={p}
                   hasUpdate={updates.has(p.name)}
+                  selected={selected.has(p.name)}
+                  onToggleSelected={() => toggle(p.name)}
                   onChanged={() => {
                     reload();
                     refreshUpdates();

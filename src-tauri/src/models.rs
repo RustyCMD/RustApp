@@ -13,6 +13,8 @@ pub struct ServerProfile {
     /// Absolute path to the server install (the dir that contains
     /// `RustDedicated.exe` / `RustDedicated_Data/`, etc.).
     pub server_directory: String,
+    #[serde(default)]
+    pub notes: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -26,6 +28,8 @@ pub struct ServerProfileInput {
     pub rcon_port: u16,
     pub rcon_password: String,
     pub server_directory: String,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 /// A plugin entry as advertised in the uMod store (catalog item, not yet installed).
@@ -167,4 +171,30 @@ pub struct BulkUpdateResult {
 pub struct BulkUpdateFailure {
     pub plugin_name: String,
     pub error: String,
+}
+
+/// One starred RCON command for a given server.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedCommand {
+    pub id: i64,
+    pub profile_id: String,
+    pub label: String,
+    pub command: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Wire shape for `export_profiles_to_path` / `import_profiles_from_path`.
+/// The version field gives us room to evolve the format without breaking
+/// older exports.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileExport {
+    pub version: u32,
+    pub exported_at: DateTime<Utc>,
+    pub profiles: Vec<ServerProfile>,
+}
+
+impl ProfileExport {
+    pub const CURRENT_VERSION: u32 = 1;
 }

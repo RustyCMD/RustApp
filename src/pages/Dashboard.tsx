@@ -103,6 +103,13 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {profile.notes && (
+        <div className="card" style={{ borderLeft: "3px solid var(--accent)" }}>
+          <div className="muted small" style={{ marginBottom: 6 }}>NOTES</div>
+          <div style={{ whiteSpace: "pre-wrap" }}>{profile.notes}</div>
+        </div>
+      )}
+
       <div className="grid-4" style={{ marginBottom: 16 }}>
         <StatTile
           icon={Users}

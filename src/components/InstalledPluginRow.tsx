@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Power, RefreshCw, Settings, Trash2 } from "lucide-react";
+import { CheckSquare, Power, RefreshCw, Settings, Square, Trash2 } from "lucide-react";
 import {
   disablePlugin,
   enablePlugin,
@@ -13,6 +13,8 @@ interface Props {
   profileId: string;
   plugin: InstalledPlugin;
   hasUpdate?: boolean;
+  selected?: boolean;
+  onToggleSelected?: () => void;
   onChanged: () => void;
   onConfigure: (plugin: InstalledPlugin) => void;
 }
@@ -21,6 +23,8 @@ export default function InstalledPluginRow({
   profileId,
   plugin,
   hasUpdate,
+  selected = false,
+  onToggleSelected,
   onChanged,
   onConfigure,
 }: Props) {
@@ -59,7 +63,23 @@ export default function InstalledPluginRow({
   }
 
   return (
-    <tr>
+    <tr style={selected ? { background: "var(--accent-soft)" } : undefined}>
+      {onToggleSelected && (
+        <td style={{ width: 36 }}>
+          <button
+            className="ghost icon"
+            onClick={onToggleSelected}
+            style={{ padding: 4 }}
+            aria-label={selected ? "Deselect" : "Select"}
+          >
+            {selected ? (
+              <CheckSquare size={16} color="var(--accent)" />
+            ) : (
+              <Square size={16} />
+            )}
+          </button>
+        </td>
+      )}
       <td>
         <div className="stack" style={{ gap: 2 }}>
           <div className="row" style={{ gap: 8 }}>

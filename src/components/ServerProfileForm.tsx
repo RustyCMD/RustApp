@@ -15,6 +15,7 @@ const empty: ServerProfileInput = {
   rconPort: 28016,
   rconPassword: "",
   serverDirectory: "",
+  notes: "",
 };
 
 interface Props {
@@ -31,8 +32,8 @@ export default function ServerProfileForm({ editing, onDone }: Props) {
 
   useEffect(() => {
     if (editing) {
-      const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = editing;
-      setForm(rest);
+      const { id: _id, createdAt: _c, updatedAt: _u, notes, ...rest } = editing;
+      setForm({ ...rest, notes: notes ?? "" });
     } else {
       setForm(empty);
     }
@@ -132,6 +133,16 @@ export default function ServerProfileForm({ editing, onDone }: Props) {
             Browse
           </button>
         </div>
+      </label>
+
+      <label className="field full">
+        <span>Notes</span>
+        <textarea
+          rows={3}
+          value={form.notes ?? ""}
+          onChange={(e) => update("notes", e.target.value)}
+          placeholder="Anything you want to remember about this server (free-form)"
+        />
       </label>
 
       <div className="actions">

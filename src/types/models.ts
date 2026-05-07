@@ -8,6 +8,7 @@ export interface ServerProfile {
   rconPort: number;
   rconPassword: string;
   serverDirectory: string;
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -18,6 +19,15 @@ export interface ServerProfileInput {
   rconPort: number;
   rconPassword: string;
   serverDirectory: string;
+  notes?: string | null;
+}
+
+export interface SavedCommand {
+  id: number;
+  profileId: string;
+  label: string;
+  command: string;
+  createdAt: string;
 }
 
 export interface PluginMetaData {
