@@ -72,8 +72,12 @@ jobs:
       - name: Install JS deps
         run: npm ci
 
-      - name: Type-check frontend
-        run: npm run typecheck
+      # `npm run build` runs `tsc -b && vite build` — covers the typecheck
+      # and produces `dist/`, which `tauri::generate_context!()` checks for
+      # at compile time. Without it the cargo step below crashes inside the
+      # macro with "frontendDist `../dist` doesn't exist".
+      - name: Build frontend
+        run: npm run build
 
       - name: Cargo test (lib)
         working-directory: ./src-tauri
