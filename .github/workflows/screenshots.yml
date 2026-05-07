@@ -1,0 +1,70 @@
+name: Frontend screenshots
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "index.html"
+      - "vite.config.ts"
+      - "tests/screenshots/**"
+      - "playwright.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/screenshots.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Capture every route
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS deps
+        run: npm ci
+
+      # `--with-deps` installs the system libraries Chromium needs on
+      # ubuntu-latest (libnss3, libxss1, etc.) — saves us managing them by hand.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Render every route + theme
+        # Vite preview is auto-started by `webServer` in playwright.config.ts;
+        # `npm run screenshots` is just `playwright test`.
+        run: npm run screenshots
+
+      - name: Upload PNGs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rustapp-screenshots
+          path: tests/screenshots/output/*.png
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Playwright HTML report on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
