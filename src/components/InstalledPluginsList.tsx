@@ -35,7 +35,12 @@ export default function InstalledPluginsList({
   profileId: string;
 }) {
   const toast = useToast();
-  const updateStore = useUpdateStore();
+  // IMPORTANT: subscribe via a selector. `useUpdateStore()` (no selector)
+  // returns the whole state object, whose reference changes on every
+  // `set()` inside the store — which then changes the identity of any
+  // useCallback/useEffect that depends on it, triggering an infinite
+  // render loop the moment we call refresh() inside one of them.
+  const refreshGlobalUpdates = useUpdateStore((s) => s.refresh);
 
   const [plugins, setPlugins] = useState<InstalledPlugin[] | null>(null);
   const [updates, setUpdates] = useState<Set<string>>(new Set());
@@ -60,11 +65,11 @@ export default function InstalledPluginsList({
     try {
       const ups = await checkForPluginUpdates(profileId);
       setUpdates(new Set(ups.map((u) => u.pluginName)));
-      updateStore.refresh(profileId);
+      refreshGlobalUpdates(profileId);
     } catch {
       // best-effort
     }
-  }, [profileId, updateStore]);
+  }, [profileId, refreshGlobalUpdates]);
 
   useEffect(() => {
     reload();
