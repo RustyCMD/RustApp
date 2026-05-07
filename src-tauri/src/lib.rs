@@ -2,6 +2,7 @@
 //! the same code path on every platform (including mobile, where Tauri 2
 //! generates a `start` C symbol from the `tauri::mobile_entry_point`).
 
+mod activity;
 mod commands;
 mod config_files;
 mod database;
@@ -36,32 +37,42 @@ pub fn run() {
                 .unwrap_or_else(|_| std::env::temp_dir().join("rustapp"));
             std::fs::create_dir_all(&data_dir)?;
             let db = Db::open(&data_dir.join("rustapp.sqlite"))?;
+            activity::migrate(&db)?;
             app.manage(db);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // profiles
+            // profiles + RCON
             commands::add_server_profile,
             commands::update_server_profile,
             commands::delete_server_profile,
             commands::get_server_profiles,
             commands::get_server_profile,
             commands::test_rcon_connection,
+            commands::send_rcon_command,
+            commands::get_server_status,
+            commands::get_player_list,
             // installed plugins
             commands::get_installed_plugins,
             commands::enable_plugin,
             commands::disable_plugin,
             commands::reload_plugin,
+            commands::uninstall_plugin,
             // configs
             commands::load_plugin_config,
             commands::save_plugin_config,
+            commands::list_config_backups,
             // store
             commands::fetch_umod_plugins,
             commands::list_cached_umod_plugins,
             commands::install_plugin,
             // updates / deps
             commands::check_for_plugin_updates,
+            commands::update_all_plugins,
             commands::check_common_dependencies,
+            // activity log
+            commands::list_activity,
+            commands::clear_activity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

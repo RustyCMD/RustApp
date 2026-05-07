@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CheckCircle2, Pencil, Plug, Trash2 } from "lucide-react";
 import { deleteServerProfile, testRconConnection } from "@/api/tauriCommands";
 import { useServerStore } from "@/state/serverStore";
 import { useToast } from "@/components/Toast";
@@ -23,7 +24,7 @@ export default function ServerProfileList({ onEdit }: Props) {
       const r = await testRconConnection(p.id);
       toast.push(
         r.ok
-          ? `Connected (${r.elapsedMs} ms): ${r.serverResponse ?? ""}`
+          ? `Connected (${r.elapsedMs} ms)`
           : `Failed: ${r.serverResponse ?? "unknown"}`,
         r.ok ? "ok" : "error",
       );
@@ -59,24 +60,47 @@ export default function ServerProfileList({ onEdit }: Props) {
         {profiles.map((p) => (
           <tr key={p.id}>
             <td>
-              <strong>{p.name}</strong>{" "}
-              {p.id === selectedId && <span className="pill on">active</span>}
+              <div className="row" style={{ gap: 8 }}>
+                <strong>{p.name}</strong>
+                {p.id === selectedId && (
+                  <span className="pill on">
+                    <CheckCircle2 size={11} /> active
+                  </span>
+                )}
+              </div>
             </td>
             <td>
               <code>
                 {p.ipAddress}:{p.rconPort}
               </code>
             </td>
-            <td className="muted">{p.serverDirectory}</td>
-            <td className="row" style={{ justifyContent: "flex-end" }}>
-              <button onClick={() => select(p.id)} disabled={p.id === selectedId}>
-                Activate
+            <td className="muted small mono">{p.serverDirectory}</td>
+            <td className="row" style={{ justifyContent: "flex-end", gap: 4 }}>
+              {p.id !== selectedId && (
+                <button onClick={() => select(p.id)}>Activate</button>
+              )}
+              <button
+                onClick={() => onTest(p)}
+                disabled={testing === p.id}
+                className="ghost icon"
+                title="Test RCON"
+              >
+                <Plug size={15} />
               </button>
-              <button onClick={() => onTest(p)} disabled={testing === p.id}>
-                {testing === p.id ? "Testing…" : "Test RCON"}
+              <button
+                onClick={() => onEdit(p)}
+                className="ghost icon"
+                title="Edit"
+              >
+                <Pencil size={15} />
               </button>
-              <button onClick={() => onEdit(p)}>Edit</button>
-              <button onClick={() => onDelete(p)}>Delete</button>
+              <button
+                onClick={() => onDelete(p)}
+                className="ghost icon"
+                title="Delete"
+              >
+                <Trash2 size={15} color="var(--bad)" />
+              </button>
             </td>
           </tr>
         ))}

@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["msi", "nsis", "deb", "appimage", "dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -37,6 +37,11 @@
     ],
     "category": "Utility",
     "shortDescription": "Manage uMod plugins for Rust game servers",
-    "longDescription": "Discover, install, update and configure server-side uMod (Oxide) plugins for Rust game servers."
+    "longDescription": "Discover, install, update and configure server-side uMod (Oxide) plugins for Rust game servers.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

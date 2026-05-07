@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { CheckCircle2, AlertCircle, Info } from "lucide-react";
 
 type Tone = "ok" | "error" | "info";
 interface ToastMsg { id: number; tone: Tone; text: string }
@@ -8,6 +9,12 @@ interface Ctx {
 }
 
 const ToastCtx = createContext<Ctx | null>(null);
+
+const ICON: Record<Tone, typeof CheckCircle2> = {
+  ok: CheckCircle2,
+  error: AlertCircle,
+  info: Info,
+};
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
@@ -19,10 +26,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={{ push }}>
       {children}
-      <div>
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.tone}`}>{t.text}</div>
-        ))}
+      <div className="toast-stack">
+        {toasts.map((t) => {
+          const Icon = ICON[t.tone];
+          return (
+            <div key={t.id} className={`toast ${t.tone}`}>
+              <Icon size={18} />
+              <span>{t.text}</span>
+            </div>
+          );
+        })}
       </div>
     </ToastCtx.Provider>
   );

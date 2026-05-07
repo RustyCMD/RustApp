@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Power, RefreshCw, Settings, Trash2 } from "lucide-react";
 import {
   disablePlugin,
   enablePlugin,
   reloadPlugin,
+  uninstallPlugin,
 } from "@/api/tauriCommands";
 import { useToast } from "@/components/Toast";
 import type { InstalledPlugin } from "@/types/models";
@@ -38,19 +40,41 @@ export default function InstalledPluginRow({
     }
   }
 
+  async function onUninstall() {
+    const deleteCfg = confirm(
+      `Uninstall "${plugin.name}"?\n\nClick OK to also delete its config file(s); Cancel to keep configs.`,
+    );
+    // Cancel here means user said "keep configs" — they only get out by closing the dialog at the OS level,
+    // so we always proceed with the uninstall and use the choice for `deleteConfig`.
+    setBusy(true);
+    try {
+      await uninstallPlugin(profileId, plugin.name, deleteCfg);
+      toast.push(`Uninstalled ${plugin.name}`, "ok");
+      onChanged();
+    } catch (e) {
+      toast.push(`Uninstall failed: ${e}`, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <tr>
       <td>
-        <strong>{plugin.name}</strong>
-        {hasUpdate && <span className="pill warn" style={{ marginLeft: 8 }}>update</span>}
-        {plugin.description && (
-          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-            {plugin.description}
+        <div className="stack" style={{ gap: 2 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <strong>{plugin.name}</strong>
+            {hasUpdate && <span className="pill warn">update</span>}
           </div>
-        )}
+          {plugin.description && (
+            <div className="muted small" style={{ marginTop: 2 }}>
+              {plugin.description}
+            </div>
+          )}
+        </div>
       </td>
-      <td>{plugin.author ?? "—"}</td>
-      <td>{plugin.version ?? "—"}</td>
+      <td className="muted">{plugin.author ?? "—"}</td>
+      <td className="mono small">{plugin.version ?? "—"}</td>
       <td>
         {plugin.enabled ? (
           <span className="pill on">enabled</span>
@@ -58,36 +82,49 @@ export default function InstalledPluginRow({
           <span className="pill off">disabled</span>
         )}
       </td>
-      <td className="row" style={{ justifyContent: "flex-end" }}>
+      <td className="row" style={{ justifyContent: "flex-end", gap: 4 }}>
         {plugin.enabled ? (
           <button
             disabled={busy}
-            onClick={() =>
-              run("Disabled", () => disablePlugin(profileId, plugin.name))
-            }
+            className="ghost icon"
+            title="Disable"
+            onClick={() => run("Disabled", () => disablePlugin(profileId, plugin.name))}
           >
-            Disable
+            <Power size={15} />
           </button>
         ) : (
           <button
             disabled={busy}
-            onClick={() =>
-              run("Enabled", () => enablePlugin(profileId, plugin.name))
-            }
+            className="ghost icon"
+            title="Enable"
+            onClick={() => run("Enabled", () => enablePlugin(profileId, plugin.name))}
           >
-            Enable
+            <Power size={15} color="var(--ok)" />
           </button>
         )}
         <button
           disabled={busy || !plugin.enabled}
-          onClick={() =>
-            run("Reloaded", () => reloadPlugin(profileId, plugin.name))
-          }
+          className="ghost icon"
+          title="Reload"
+          onClick={() => run("Reloaded", () => reloadPlugin(profileId, plugin.name))}
         >
-          Reload
+          <RefreshCw size={15} />
         </button>
-        <button onClick={() => onConfigure(plugin)} disabled={!plugin.hasConfig}>
-          Configure
+        <button
+          className="ghost icon"
+          title={plugin.hasConfig ? "Configure" : "No config file"}
+          disabled={!plugin.hasConfig}
+          onClick={() => onConfigure(plugin)}
+        >
+          <Settings size={15} />
+        </button>
+        <button
+          disabled={busy}
+          className="ghost icon"
+          title="Uninstall"
+          onClick={onUninstall}
+        >
+          <Trash2 size={15} color="var(--bad)" />
         </button>
       </td>
     </tr>

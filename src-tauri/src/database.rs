@@ -28,12 +28,18 @@ impl Db {
         Ok(db)
     }
 
-    fn with<R>(&self, f: impl FnOnce(&Connection) -> Result<R>) -> Result<R> {
+    /// Run the given closure under the connection lock. Other modules use
+    /// this to add their own SQL on top of the core schema.
+    pub fn with_conn<R>(&self, f: impl FnOnce(&Connection) -> Result<R>) -> Result<R> {
         let guard = self
             .0
             .lock()
             .map_err(|_| AppError::other("database mutex poisoned"))?;
         f(&guard)
+    }
+
+    fn with<R>(&self, f: impl FnOnce(&Connection) -> Result<R>) -> Result<R> {
+        self.with_conn(f)
     }
 
     fn migrate(&self) -> Result<()> {

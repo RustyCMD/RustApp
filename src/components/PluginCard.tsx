@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Download, ExternalLink, Loader2 } from "lucide-react";
 import { installPlugin } from "@/api/tauriCommands";
 import { useToast } from "@/components/Toast";
 import type { PluginMetaData } from "@/types/models";
@@ -31,34 +32,43 @@ export default function PluginCard({ profileId, plugin }: Props) {
   }
 
   return (
-    <div className="card" style={{ marginBottom: 12 }}>
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <strong>{plugin.name}</strong>{" "}
-          {plugin.version && <span className="muted">v{plugin.version}</span>}
-          <div className="muted" style={{ fontSize: 12 }}>
-            {plugin.author ? `by ${plugin.author}` : "unknown author"}
-          </div>
-        </div>
+    <article className="plugin-card-mod">
+      <div className="row between" style={{ gap: 8 }}>
+        <h4>{plugin.name}</h4>
+        {plugin.version && (
+          <span className="pill info mono">v{plugin.version}</span>
+        )}
+      </div>
+      <div className="muted small">
+        {plugin.author ? `by ${plugin.author}` : "unknown author"}
+      </div>
+      {plugin.description && <div className="desc">{plugin.description}</div>}
+
+      <div className="footer">
+        {plugin.pageUrl ? (
+          <a
+            href={plugin.pageUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="muted small row"
+            style={{ gap: 4 }}
+          >
+            <ExternalLink size={12} />
+            uMod
+          </a>
+        ) : (
+          <span />
+        )}
         <button
           className="primary"
           onClick={onInstall}
           disabled={busy || !canInstall}
           title={!canInstall ? "Need an active server and a download URL" : undefined}
         >
+          {busy ? <Loader2 size={14} className="spinner" /> : <Download size={14} />}
           {busy ? "Installing…" : "Install"}
         </button>
       </div>
-      {plugin.description && (
-        <p style={{ marginTop: 8, marginBottom: 0 }}>{plugin.description}</p>
-      )}
-      {plugin.pageUrl && (
-        <div style={{ marginTop: 8, fontSize: 12 }}>
-          <a href={plugin.pageUrl} target="_blank" rel="noreferrer">
-            View on uMod
-          </a>
-        </div>
-      )}
-    </div>
+    </article>
   );
 }

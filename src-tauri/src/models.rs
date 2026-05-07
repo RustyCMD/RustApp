@@ -108,3 +108,63 @@ impl ConfigKind {
         }
     }
 }
+
+/// One snapshot taken before a config save.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigBackup {
+    pub file_name: String,
+    pub path: String,
+    pub size_bytes: u64,
+    pub modified: Option<DateTime<Utc>>,
+}
+
+/// One row in `playerlist` parsed from RCON output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerInfo {
+    pub steam_id: String,
+    pub name: String,
+    pub ping: Option<u32>,
+    pub connected_seconds: Option<u64>,
+    pub address: Option<String>,
+}
+
+/// Distilled `serverinfo` reply.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerStatus {
+    pub hostname: Option<String>,
+    pub map: Option<String>,
+    pub players: Option<u32>,
+    pub max_players: Option<u32>,
+    pub queued: Option<u32>,
+    pub joining: Option<u32>,
+    pub uptime_seconds: Option<u64>,
+    pub framerate: Option<f32>,
+    pub raw: String,
+}
+
+/// Free-form RCON command result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RconCommandResult {
+    pub command: String,
+    pub response: String,
+    pub elapsed_ms: u64,
+}
+
+/// Result of a bulk update-all run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkUpdateResult {
+    pub updated: Vec<String>,
+    pub failed: Vec<BulkUpdateFailure>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkUpdateFailure {
+    pub plugin_name: String,
+    pub error: String,
+}

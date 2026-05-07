@@ -4,15 +4,21 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ActivityEntry,
+  BulkUpdateResult,
+  ConfigBackup,
   ConfigKind,
   DependencyStatus,
   InstalledPlugin,
+  PlayerInfo,
   PluginMetaData,
   PluginStorePage,
   PluginUpdateInfo,
+  RconCommandResult,
   RconTestResult,
   ServerProfile,
   ServerProfileInput,
+  ServerStatus,
 } from "@/types/models";
 
 // ---------- Server profiles ----------
@@ -35,6 +41,15 @@ export const getServerProfile = (id: string) =>
 export const testRconConnection = (profileId: string) =>
   invoke<RconTestResult>("test_rcon_connection", { profileId });
 
+export const sendRconCommand = (profileId: string, command: string) =>
+  invoke<RconCommandResult>("send_rcon_command", { profileId, command });
+
+export const getServerStatus = (profileId: string) =>
+  invoke<ServerStatus>("get_server_status", { profileId });
+
+export const getPlayerList = (profileId: string) =>
+  invoke<PlayerInfo[]>("get_player_list", { profileId });
+
 // ---------- Installed plugins ----------
 
 export const getInstalledPlugins = (profileId: string) =>
@@ -48,6 +63,13 @@ export const disablePlugin = (profileId: string, pluginName: string) =>
 
 export const reloadPlugin = (profileId: string, pluginName: string) =>
   invoke<string>("reload_plugin", { profileId, pluginName });
+
+export const uninstallPlugin = (
+  profileId: string,
+  pluginName: string,
+  deleteConfig: boolean,
+) =>
+  invoke<string[]>("uninstall_plugin", { profileId, pluginName, deleteConfig });
 
 // ---------- Plugin configs ----------
 
@@ -70,6 +92,9 @@ export const savePluginConfig = (
     content,
   });
 
+export const listConfigBackups = (profileId: string, pluginName: string) =>
+  invoke<ConfigBackup[]>("list_config_backups", { profileId, pluginName });
+
 // ---------- Plugin store ----------
 
 export const fetchUmodPlugins = (page: number, search?: string) =>
@@ -86,5 +111,15 @@ export const installPlugin = (profileId: string, pluginSlug: string) =>
 export const checkForPluginUpdates = (profileId: string) =>
   invoke<PluginUpdateInfo[]>("check_for_plugin_updates", { profileId });
 
+export const updateAllPlugins = (profileId: string) =>
+  invoke<BulkUpdateResult>("update_all_plugins", { profileId });
+
 export const checkCommonDependencies = (profileId: string) =>
   invoke<DependencyStatus>("check_common_dependencies", { profileId });
+
+// ---------- Activity log ----------
+
+export const listActivity = (limit?: number) =>
+  invoke<ActivityEntry[]>("list_activity", { limit });
+
+export const clearActivity = () => invoke<void>("clear_activity");

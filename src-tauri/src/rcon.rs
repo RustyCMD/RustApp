@@ -15,7 +15,7 @@ use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::error::{AppError, Result};
-use crate::models::RconTestResult;
+use crate::models::{PlayerInfo, RconTestResult, ServerStatus};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -101,4 +101,60 @@ pub async fn test_connection(ip: &str, port: u16, password: &str) -> Result<Rcon
             elapsed_ms: started.elapsed().as_millis() as u64,
         }),
     }
+}
+
+/// Run `serverinfo`. Rust returns JSON, but we keep the raw text too in case
+/// the server responds with the older textual format.
+pub async fn get_server_status(ip: &str, port: u16, password: &str) -> Result<ServerStatus> {
+    let raw = send_command(ip, port, password, "serverinfo").await?;
+    let mut status = ServerStatus {
+        raw: raw.clone(),
+        ..Default::default()
+    };
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string);
+        let u = |k: &str| v.get(k).and_then(|x| x.as_u64()).map(|n| n as u32);
+        let f = |k: &str| v.get(k).and_then(|x| x.as_f64()).map(|n| n as f32);
+        status.hostname = s("Hostname").or_else(|| s("hostname"));
+        status.map = s("Map").or_else(|| s("map"));
+        status.players = u("Players").or_else(|| u("players"));
+        status.max_players = u("MaxPlayers").or_else(|| u("maxPlayers"));
+        status.queued = u("Queued").or_else(|| u("queued"));
+        status.joining = u("Joining").or_else(|| u("joining"));
+        status.uptime_seconds = v.get("Uptime").and_then(|x| x.as_u64());
+        status.framerate = f("Framerate").or_else(|| f("fps"));
+    }
+    Ok(status)
+}
+
+/// Run `playerlist`. Rust answers with a JSON array — we tolerate either
+/// `SteamID` or `SteamId` casing and missing fields.
+pub async fn get_player_list(ip: &str, port: u16, password: &str) -> Result<Vec<PlayerInfo>> {
+    let raw = send_command(ip, port, password, "playerlist").await?;
+    let v: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return Ok(vec![]),
+    };
+    let Some(arr) = v.as_array() else {
+        return Ok(vec![]);
+    };
+    let mut out = Vec::with_capacity(arr.len());
+    for p in arr {
+        let s = |k: &str| p.get(k).and_then(|x| x.as_str()).map(str::to_string);
+        let u = |k: &str| p.get(k).and_then(|x| x.as_u64());
+        out.push(PlayerInfo {
+            steam_id: s("SteamID")
+                .or_else(|| s("SteamId"))
+                .or_else(|| s("steamId"))
+                .unwrap_or_default(),
+            name: s("DisplayName")
+                .or_else(|| s("Name"))
+                .or_else(|| s("name"))
+                .unwrap_or_else(|| "(unknown)".to_string()),
+            ping: u("Ping").map(|n| n as u32),
+            connected_seconds: u("ConnectedSeconds").or_else(|| u("connected_seconds")),
+            address: s("Address").or_else(|| s("address")),
+        });
+    }
+    Ok(out)
 }

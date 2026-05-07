@@ -172,3 +172,42 @@ pub async fn install_plugin_file(
     fs::write(&target, file_content).await?;
     Ok(target)
 }
+
+/// Remove `<plugin>.cs` (from either enabled/ or disabled/). Optionally also
+/// removes its config files. Returns the list of paths actually deleted.
+pub async fn uninstall_plugin(
+    server_dir: &str,
+    plugin_name: &str,
+    delete_config: bool,
+) -> Result<Vec<PathBuf>> {
+    validate_plugin_name(plugin_name)?;
+    let mut removed = Vec::new();
+
+    for candidate in [
+        enabled_plugins_dir(server_dir).join(format!("{plugin_name}.cs")),
+        disabled_plugins_dir(server_dir).join(format!("{plugin_name}.cs")),
+    ] {
+        if candidate.exists() {
+            fs::remove_file(&candidate).await?;
+            removed.push(candidate);
+        }
+    }
+
+    if removed.is_empty() {
+        return Err(AppError::not_found(format!(
+            "{plugin_name}: not found in plugins or plugins/disabled"
+        )));
+    }
+
+    if delete_config {
+        for kind in [crate::models::ConfigKind::Json, crate::models::ConfigKind::Ini] {
+            let p = crate::utils::config_path(server_dir, plugin_name, kind);
+            if p.exists() {
+                fs::remove_file(&p).await?;
+                removed.push(p);
+            }
+        }
+    }
+
+    Ok(removed)
+}

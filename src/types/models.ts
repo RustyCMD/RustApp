@@ -67,3 +67,58 @@ export interface PluginStorePage {
 }
 
 export type ConfigKind = "json" | "ini";
+
+export interface ConfigBackup {
+  fileName: string;
+  path: string;
+  sizeBytes: number;
+  modified: string | null;
+}
+
+export interface PlayerInfo {
+  steamId: string;
+  name: string;
+  ping: number | null;
+  connectedSeconds: number | null;
+  address: string | null;
+}
+
+export interface ServerStatus {
+  hostname: string | null;
+  map: string | null;
+  players: number | null;
+  maxPlayers: number | null;
+  queued: number | null;
+  joining: number | null;
+  uptimeSeconds: number | null;
+  framerate: number | null;
+  raw: string;
+}
+
+export interface RconCommandResult {
+  command: string;
+  response: string;
+  elapsedMs: number;
+}
+
+export interface BulkUpdateFailure {
+  pluginName: string;
+  error: string;
+}
+
+export interface BulkUpdateResult {
+  updated: string[];
+  failed: BulkUpdateFailure[];
+}
+
+export type ActivityStatus = "ok" | "error" | "info";
+
+export interface ActivityEntry {
+  id: number;
+  timestamp: string;
+  profileId: string | null;
+  action: string;
+  target: string | null;
+  status: ActivityStatus;
+  message: string | null;
+}

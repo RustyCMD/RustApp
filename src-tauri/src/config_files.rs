@@ -1,12 +1,13 @@
 //! Read/write plugin configs at `oxide/config/<plugin>.{json|ini}`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use chrono::Utc;
 use tokio::fs;
 
 use crate::error::{AppError, Result};
 use crate::models::ConfigKind;
-use crate::utils::{config_path, validate_plugin_name};
+use crate::utils::{config_dir, config_path, validate_plugin_name};
 
 pub async fn load(
     server_dir: &str,
@@ -37,8 +38,88 @@ pub async fn save(
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).await?;
     }
+    // Snapshot the previous version so a bad edit can be recovered. We cap
+    // backups loosely below — see `prune_backups`.
+    if path.exists() {
+        let _ = backup(&path, plugin_name, kind, server_dir).await;
+    }
     fs::write(&path, content).await?;
     Ok(path)
+}
+
+async fn backup(
+    src: &Path,
+    plugin_name: &str,
+    kind: ConfigKind,
+    server_dir: &str,
+) -> Result<PathBuf> {
+    let backups = config_dir(server_dir).join(".rustapp-backups");
+    fs::create_dir_all(&backups).await?;
+    let stamp = Utc::now().format("%Y%m%dT%H%M%S");
+    let dest = backups.join(format!("{plugin_name}-{stamp}.{}", kind.extension()));
+    fs::copy(src, &dest).await?;
+    let _ = prune_backups(&backups, plugin_name, kind, 10).await;
+    Ok(dest)
+}
+
+/// Keep only the most recent `keep` backups for a given plugin+kind.
+async fn prune_backups(
+    dir: &Path,
+    plugin_name: &str,
+    kind: ConfigKind,
+    keep: usize,
+) -> Result<()> {
+    let mut rd = fs::read_dir(dir).await?;
+    let prefix = format!("{plugin_name}-");
+    let suffix = format!(".{}", kind.extension());
+    let mut entries: Vec<_> = Vec::new();
+    while let Some(e) = rd.next_entry().await? {
+        let name = e.file_name();
+        let Some(s) = name.to_str() else { continue };
+        if s.starts_with(&prefix) && s.ends_with(&suffix) {
+            entries.push((s.to_string(), e.path()));
+        }
+    }
+    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    for (_, path) in entries.into_iter().skip(keep) {
+        let _ = fs::remove_file(path).await;
+    }
+    Ok(())
+}
+
+pub async fn list_backups(
+    server_dir: &str,
+    plugin_name: &str,
+) -> Result<Vec<crate::models::ConfigBackup>> {
+    validate_plugin_name(plugin_name)?;
+    let dir = config_dir(server_dir).join(".rustapp-backups");
+    if !dir.exists() {
+        return Ok(vec![]);
+    }
+    let prefix = format!("{plugin_name}-");
+    let mut rd = fs::read_dir(&dir).await?;
+    let mut out = Vec::new();
+    while let Some(e) = rd.next_entry().await? {
+        let name = e.file_name();
+        let Some(s) = name.to_str() else { continue };
+        if !s.starts_with(&prefix) {
+            continue;
+        }
+        let meta = e.metadata().await?;
+        out.push(crate::models::ConfigBackup {
+            file_name: s.to_string(),
+            path: e.path().to_string_lossy().into_owned(),
+            size_bytes: meta.len(),
+            modified: meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| chrono::DateTime::<Utc>::from_timestamp(d.as_secs() as i64, 0))
+                .flatten(),
+        });
+    }
+    out.sort_by(|a, b| b.file_name.cmp(&a.file_name));
+    Ok(out)
 }
 
 /// Refuse to overwrite a config with something that obviously isn't valid for
