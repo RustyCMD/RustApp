@@ -21,11 +21,6 @@ interface Route {
   ready: string;
 }
 
-// Direct URL navigation rather than sidebar clicks. Earlier versions of
-// this spec clicked through React Router's <NavLink>, but Playwright's
-// post-click stability checks would hang for the full test timeout
-// against `vite preview`. With `serve --single` (SPA fallback) every
-// route resolves to index.html so a normal goto works.
 const ROUTES: Route[] = [
   { url: "/",          name: "01-dashboard", ready: ".stat-tile" },
   { url: "/installed", name: "02-installed", ready: "table tbody tr" },
@@ -40,13 +35,33 @@ const THEMES = ["dark", "light"] as const;
 
 for (const theme of THEMES) {
   test(`${theme} theme — every route`, async ({ page }) => {
+    // Capture browser-side errors so any future failure has actionable
+    // diagnostics in the workflow log instead of a bare timeout.
+    page.on("pageerror", (e) => console.log("[browser pageerror]", e.message));
+    page.on("console", (m) => {
+      if (m.type() === "error") console.log("[browser console]", m.text());
+    });
+
     await prime(page, theme);
 
+    // Load the SPA once. Every subsequent route change is client-side via
+    // history.pushState + popstate so the mock IPC bridge and seeded
+    // stores stay applied throughout — full navigations were re-running
+    // the page in a state where React Router sometimes failed to settle
+    // before the assertion deadline.
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".sidebar .brand").first()).toBeVisible({
+      timeout: 10_000,
+    });
+
     for (const route of ROUTES) {
-      await page.goto(route.url, { waitUntil: "domcontentloaded" });
-      await expect(page.locator(".sidebar .brand").first()).toBeVisible({
-        timeout: 8_000,
-      });
+      // React Router v6 listens to `popstate`. pushState changes the URL
+      // without firing it on its own, so we dispatch one manually.
+      await page.evaluate((url) => {
+        window.history.pushState({}, "", url);
+        window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+      }, route.url);
+
       await expect(page.locator(route.ready).first()).toBeVisible({
         timeout: 8_000,
       });
@@ -61,8 +76,6 @@ for (const theme of THEMES) {
 
 async function prime(page: Page, theme: "dark" | "light") {
   // Inject the mock IPC bridge before the React bundle's modules execute.
-  // addInitScript re-runs on every navigation (including the goto for
-  // each route), so the mock + persisted theme are always present.
   await page.addInitScript({ content: MOCK });
   await page.addInitScript({
     content: `try {
