@@ -143,8 +143,10 @@ export default function PlayersPage() {
 
 function formatDuration(secs: number | null): string {
   if (secs == null) return "—";
-  const h = Math.floor(secs / 3600);
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
   const m = Math.floor((secs % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
 }

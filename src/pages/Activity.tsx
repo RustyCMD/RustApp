@@ -95,7 +95,7 @@ export default function ActivityPage() {
               {visible!.map((e) => (
                 <tr key={e.id}>
                   <td className="mono small muted" style={{ whiteSpace: "nowrap" }}>
-                    {new Date(e.timestamp).toLocaleString()}
+                    {formatActivityTime(e.timestamp)}
                   </td>
                   <td>
                     <span
@@ -114,5 +114,32 @@ export default function ActivityPage() {
         )}
       </div>
     </>
+  );
+}
+
+/** Compact-but-precise timestamp: relative for recent days, short
+ *  date+time for this year, full date for prior years. */
+function formatActivityTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  if (sameCalendarDay(d, now)) return `Today, ${time}`;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameCalendarDay(d, yesterday)) return `Yesterday, ${time}`;
+
+  if (d.getFullYear() === now.getFullYear()) {
+    const md = d.toLocaleDateString([], { month: "short", day: "numeric" });
+    return `${md}, ${time}`;
+  }
+  return d.toLocaleDateString();
+}
+
+function sameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
   );
 }

@@ -299,7 +299,10 @@ function RecentActivity() {
           </span>
           <span>{a.target ?? a.message ?? ""}</span>
           <span className="faint small" style={{ marginLeft: "auto" }}>
-            {new Date(a.timestamp).toLocaleTimeString()}
+            {new Date(a.timestamp).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
           </span>
         </div>
       ))}
