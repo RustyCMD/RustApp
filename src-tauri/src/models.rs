@@ -1,0 +1,110 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+/// A saved Rust server (the user's RCON target plus its on-disk install path).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerProfile {
+    pub id: String,
+    pub name: String,
+    pub ip_address: String,
+    pub rcon_port: u16,
+    pub rcon_password: String,
+    /// Absolute path to the server install (the dir that contains
+    /// `RustDedicated.exe` / `RustDedicated_Data/`, etc.).
+    pub server_directory: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Input shape used when creating a new profile (id + timestamps assigned by backend).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerProfileInput {
+    pub name: String,
+    pub ip_address: String,
+    pub rcon_port: u16,
+    pub rcon_password: String,
+    pub server_directory: String,
+}
+
+/// A plugin entry as advertised in the uMod store (catalog item, not yet installed).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginMetaData {
+    pub slug: String,
+    pub name: String,
+    pub author: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub download_url: Option<String>,
+    pub page_url: Option<String>,
+    pub last_updated: Option<DateTime<Utc>>,
+}
+
+/// A `.cs` file already on disk under `oxide/plugins/` or `oxide/plugins/disabled/`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledPlugin {
+    pub name: String,
+    pub author: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub file_path: String,
+    pub enabled: bool,
+    pub has_config: bool,
+}
+
+/// One plugin where the installed version is older than the latest in the store.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginUpdateInfo {
+    pub plugin_name: String,
+    pub installed_version: Option<String>,
+    pub latest_version: Option<String>,
+    pub download_url: Option<String>,
+}
+
+/// Result of running [`check_common_dependencies`] against a server install.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyStatus {
+    pub managed_dir: String,
+    pub present: Vec<String>,
+    pub missing: Vec<String>,
+}
+
+/// Lightweight view returned by the RCON test command.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RconTestResult {
+    pub ok: bool,
+    pub server_response: Option<String>,
+    pub elapsed_ms: u64,
+}
+
+/// One page of plugin store results.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginStorePage {
+    pub items: Vec<PluginMetaData>,
+    pub page: u32,
+    pub has_next: bool,
+}
+
+/// `json` or `ini` config file kind.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConfigKind {
+    Json,
+    Ini,
+}
+
+impl ConfigKind {
+    pub fn extension(self) -> &'static str {
+        match self {
+            ConfigKind::Json => "json",
+            ConfigKind::Ini => "ini",
+        }
+    }
+}
