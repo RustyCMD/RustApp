@@ -25,10 +25,12 @@ export default defineConfig({
     },
   ],
 
-  // Build dist/ before launching, then serve it. Running inside the
-  // command keeps everything inline so CI just calls `npm run screenshots`.
+  // Build dist/ before launching, then serve it with `serve --single` so
+  // every URL falls back to index.html — that lets each test do a direct
+  // page.goto(route) instead of clicking through React Router's NavLink,
+  // which `vite preview` would hang on in CI.
   webServer: {
-    command: `npm run build && npx vite preview --host 127.0.0.1 --port ${PORT} --strictPort`,
+    command: `npm run build && npx serve dist --single --listen ${PORT} --no-clipboard`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

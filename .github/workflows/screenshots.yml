@@ -1,17 +1,10 @@
 name: Frontend screenshots
 
 on:
+  # Runs on every push to main. Cheap (~3 min), keeps the artifact set
+  # fresh, and lets us catch regressions in the visual layer immediately.
   push:
     branches: [main]
-    paths:
-      - "src/**"
-      - "index.html"
-      - "vite.config.ts"
-      - "tests/screenshots/**"
-      - "playwright.config.ts"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/screenshots.yml"
   workflow_dispatch:
 
 concurrency:
