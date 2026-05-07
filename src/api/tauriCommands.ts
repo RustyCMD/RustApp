@@ -3,6 +3,7 @@
 // registered in `src-tauri/src/lib.rs`.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   ActivityEntry,
   BanInfo,
@@ -10,6 +11,8 @@ import type {
   ConfigBackup,
   ConfigKind,
   DependencyStatus,
+  InstallArgs,
+  InstallProgress,
   InstalledPlugin,
   PlayerInfo,
   PluginMetaData,
@@ -190,3 +193,12 @@ export const exportProfilesToPath = (path: string) =>
 
 export const importProfilesFromPath = (path: string) =>
   invoke<number>("import_profiles_from_path", { path });
+
+// ---------- Install (one-click local server) ----------
+
+export const installRustServer = (args: InstallArgs) =>
+  invoke<ServerProfile>("install_rust_server", { args });
+
+/** Subscribe to install progress events. Returns an unlisten function. */
+export const onInstallProgress = (cb: (p: InstallProgress) => void): Promise<UnlistenFn> =>
+  listen<InstallProgress>("install-progress", (e) => cb(e.payload));

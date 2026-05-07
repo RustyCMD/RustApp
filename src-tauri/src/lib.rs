@@ -8,6 +8,7 @@ mod config_files;
 mod database;
 mod dependencies;
 mod error;
+mod installer;
 mod models;
 mod plugins;
 mod rcon;
@@ -94,6 +95,8 @@ pub fn run() {
             // profile import/export
             commands::export_profiles_to_path,
             commands::import_profiles_from_path,
+            // local server install
+            installer::install_rust_server,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

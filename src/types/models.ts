@@ -158,3 +158,29 @@ export interface AppErrorWire {
   category: string; // e.g. "RCON"
   message: string;
 }
+
+// ───────────────────── Install (one-click local server) ─────────────────────
+
+export type InstallStage =
+  | "prepare"
+  | "download_steamcmd"
+  | "extract_steamcmd"
+  | "run_steamcmd"
+  | "verify"
+  | "oxide_download"
+  | "oxide_extract"
+  | "oxide_dirs"
+  | "register_profile";
+
+export interface InstallArgs {
+  name: string;
+  installDir: string;
+  installOxide: boolean;
+}
+
+export type InstallProgress =
+  | { kind: "stage"; stage: InstallStage; message: string }
+  | { kind: "log"; line: string; stream: "stdout" | "stderr" }
+  | { kind: "done"; profileId: string }
+  | { kind: "error"; stage: InstallStage; message: string }
+  | { kind: "warning"; stage: InstallStage; message: string };

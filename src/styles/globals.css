@@ -680,3 +680,75 @@ ul.tips li:last-child { margin-bottom: 0; }
   display: inline-block;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Generic spin utility (lucide icons get this) */
+.spin { animation: spin 0.9s linear infinite; }
+
+/* =========================================================================
+ *  Install page
+ * ========================================================================= */
+
+.install-form .install-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.install-form .install-checkbox input[type="checkbox"] {
+  width: auto;
+  margin-top: 2px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.install-stages {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.install-stage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.install-stage svg { flex-shrink: 0; }
+.install-stage.st-active {
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: 500;
+}
+.install-stage.st-done { color: var(--text); }
+.install-stage.st-failed {
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.install-log-wrap {
+  margin-top: 8px;
+}
+.install-log {
+  margin: 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: #06080d;
+  color: #d6dae3;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+[data-theme="light"] .install-log { background: #14171f; color: #e7e9ef; }

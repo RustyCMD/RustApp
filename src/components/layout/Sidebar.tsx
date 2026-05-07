@@ -9,6 +9,7 @@ import {
   HelpCircle,
   Server,
   Settings,
+  Download,
   type LucideIcon,
 } from "lucide-react";
 import { useUpdateBadge } from "@/state/updateStore";
@@ -22,6 +23,7 @@ interface NavItem {
 
 const MAIN: NavItem[] = [
   { to: "/servers", label: "Servers", icon: Server },
+  { to: "/install", label: "Install", icon: Download },
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/installed", label: "Installed", icon: Boxes },
   { to: "/store", label: "Plugin Store", icon: Store },

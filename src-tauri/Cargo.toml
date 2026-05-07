@@ -20,7 +20,7 @@ tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 
 # Async runtime
-tokio = { version = "1", features = ["fs", "rt-multi-thread", "sync", "macros", "io-util", "time"] }
+tokio = { version = "1", features = ["fs", "rt-multi-thread", "sync", "macros", "io-util", "time", "process"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -54,6 +54,9 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 once_cell = "1"
 regex = "1"
 url = "2"
+
+# Zip extraction for SteamCMD bootstrap and Oxide.Rust release
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
 
 [features]
 # By default Tauri runs in production mode. Use `tauri dev` for dev.
