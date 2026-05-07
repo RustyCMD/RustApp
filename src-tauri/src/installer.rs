@@ -257,19 +257,26 @@ async fn run(
         .to_string_lossy()
         .to_string();
 
-    let mut child = Command::new(&steamcmd_exe)
-        .args([
-            "+force_install_dir",
-            install_dir_str.as_str(),
-            "+login",
-            "anonymous",
-            "+app_update",
-            RUST_APPID,
-            "validate",
-            "+quit",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+    let mut cmd = Command::new(&steamcmd_exe);
+    cmd.args([
+        "+force_install_dir",
+        install_dir_str.as_str(),
+        "+login",
+        "anonymous",
+        "+app_update",
+        RUST_APPID,
+        "validate",
+        "+quit",
+    ])
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+
+    // Suppress the SteamCMD console window on Windows. Without this, a CMD
+    // window pops up alongside the app even though we pipe stdio.
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+
+    let mut child = cmd
         .spawn()
         .map_err(|e| err(InstallStage::RunSteamcmd, format!("spawn steamcmd: {e}")))?;
 
