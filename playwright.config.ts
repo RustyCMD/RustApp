@@ -8,7 +8,9 @@ export default defineConfig({
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
   reporter: "list",
-  timeout: 60_000,
+  // Each test does one goto + one screenshot now; 30s is plenty even
+  // with a slow runner. Lower than before so a hang fails fast.
+  timeout: 30_000,
 
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,

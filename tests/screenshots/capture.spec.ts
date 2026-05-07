@@ -33,45 +33,44 @@ const ROUTES: Route[] = [
 
 const THEMES = ["dark", "light"] as const;
 
+// One test per (theme, route). Each gets its own fresh browser context, so
+// any post-screenshot hang in one test can't poison the others. Earlier
+// attempts that looped through routes inside a single test would hang
+// permanently after the first screenshot in that test, taking the rest
+// of the routes down with them.
 for (const theme of THEMES) {
-  test(`${theme} theme — every route`, async ({ page }) => {
-    // Capture browser-side errors so any future failure has actionable
-    // diagnostics in the workflow log instead of a bare timeout.
-    page.on("pageerror", (e) => console.log("[browser pageerror]", e.message));
-    page.on("console", (m) => {
-      if (m.type() === "error") console.log("[browser console]", m.text());
-    });
+  for (const route of ROUTES) {
+    test(`${theme} · ${route.name}`, async ({ page }) => {
+      // Capture browser-side errors so a future failure has actionable
+      // diagnostics in the workflow log instead of a bare timeout.
+      page.on("pageerror", (e) =>
+        console.log(`[${theme}/${route.name}] pageerror:`, e.message),
+      );
+      page.on("console", (m) => {
+        if (m.type() === "error") {
+          console.log(`[${theme}/${route.name}] console.error:`, m.text());
+        }
+      });
 
-    await prime(page, theme);
+      await prime(page, theme);
 
-    // Load the SPA once. Every subsequent route change is client-side via
-    // history.pushState + popstate so the mock IPC bridge and seeded
-    // stores stay applied throughout — full navigations were re-running
-    // the page in a state where React Router sometimes failed to settle
-    // before the assertion deadline.
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator(".sidebar .brand").first()).toBeVisible({
-      timeout: 10_000,
-    });
+      await page.goto(route.url, { waitUntil: "load" });
 
-    for (const route of ROUTES) {
-      // React Router v6 listens to `popstate`. pushState changes the URL
-      // without firing it on its own, so we dispatch one manually.
-      await page.evaluate((url) => {
-        window.history.pushState({}, "", url);
-        window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
-      }, route.url);
-
+      await expect(page.locator(".sidebar .brand").first()).toBeVisible({
+        timeout: 10_000,
+      });
       await expect(page.locator(route.ready).first()).toBeVisible({
-        timeout: 8_000,
+        timeout: 10_000,
       });
       // Let async invokes + transitions settle.
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(500);
 
-      const file = path.join(OUT, `${theme}-${route.name}.png`);
-      await page.screenshot({ path: file, fullPage: false });
-    }
-  });
+      await page.screenshot({
+        path: path.join(OUT, `${theme}-${route.name}.png`),
+        fullPage: false,
+      });
+    });
+  }
 }
 
 async function prime(page: Page, theme: "dark" | "light") {
