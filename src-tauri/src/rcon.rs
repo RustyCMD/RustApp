@@ -15,7 +15,7 @@ use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::error::{AppError, Result};
-use crate::models::{PlayerInfo, RconTestResult, ServerStatus};
+use crate::models::{BanInfo, PlayerInfo, RconTestResult, ServerStatus};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -125,6 +125,49 @@ pub async fn get_server_status(ip: &str, port: u16, password: &str) -> Result<Se
         status.framerate = f("Framerate").or_else(|| f("fps"));
     }
     Ok(status)
+}
+
+/// Run `banlistex`. Rust answers with a JSON array of bans. Older
+/// installs print a CSV-ish text format which we don't try to parse —
+/// callers should expect an empty list there and use `Console` instead.
+pub async fn get_bans(ip: &str, port: u16, password: &str) -> Result<Vec<BanInfo>> {
+    let raw = send_command(ip, port, password, "banlistex").await?;
+    let v: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return Ok(vec![]),
+    };
+    let Some(arr) = v.as_array() else {
+        return Ok(vec![]);
+    };
+    let mut out = Vec::with_capacity(arr.len());
+    for b in arr {
+        let s = |k: &str| b.get(k).and_then(|x| x.as_str()).map(str::to_string);
+        // SteamID arrives as either a string or a u64 depending on server build.
+        let steam_id = s("steamid")
+            .or_else(|| s("SteamID"))
+            .or_else(|| {
+                b.get("steamid")
+                    .or_else(|| b.get("SteamID"))
+                    .and_then(|x| x.as_u64())
+                    .map(|n| n.to_string())
+            })
+            .unwrap_or_default();
+        let name = s("username").or_else(|| s("name")).unwrap_or_default();
+        let reason = s("notes").or_else(|| s("reason")).filter(|s| !s.is_empty());
+        // expiry is a unix timestamp; 0 means permanent.
+        let expires_at = b
+            .get("expiry")
+            .and_then(|x| x.as_i64())
+            .filter(|&t| t > 0)
+            .and_then(|t| chrono::DateTime::<chrono::Utc>::from_timestamp(t, 0));
+        out.push(BanInfo {
+            steam_id,
+            name,
+            reason,
+            expires_at,
+        });
+    }
+    Ok(out)
 }
 
 /// Run `playerlist`. Rust answers with a JSON array — we tolerate either

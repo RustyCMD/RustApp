@@ -6,22 +6,25 @@ use std::time::Instant;
 
 use tauri::State;
 
+use std::path::Path;
+
 use crate::activity::{self, ActivityEntry, ActivityStatus};
 use crate::config_files;
 use crate::database::Db;
 use crate::dependencies;
 use crate::error::{AppError, Result};
 use crate::models::{
-    BulkUpdateFailure, BulkUpdateResult, ConfigBackup, ConfigKind, DependencyStatus,
+    BanInfo, BulkUpdateFailure, BulkUpdateResult, ConfigBackup, ConfigKind, DependencyStatus,
     InstalledPlugin, PlayerInfo, PluginMetaData, PluginStorePage, PluginUpdateInfo,
     ProfileExport, RconCommandResult, RconTestResult, SavedCommand, ServerProfile,
-    ServerProfileInput, ServerStatus,
+    ServerProfileInput, ServerStatus, WipeSchedule,
 };
 use crate::plugins;
 use crate::rcon;
 use crate::saved_commands;
 use crate::umod_scraper;
 use crate::utils;
+use crate::wipe_schedule;
 
 // ---------------------------------------------------------------------------
 //  Server profiles
@@ -115,6 +118,40 @@ pub async fn get_player_list(
 ) -> Result<Vec<PlayerInfo>> {
     let p = require_profile(&db, &profile_id)?;
     rcon::get_player_list(&p.ip_address, p.rcon_port, &p.rcon_password).await
+}
+
+#[tauri::command]
+pub async fn get_bans(db: State<'_, Db>, profile_id: String) -> Result<Vec<BanInfo>> {
+    let p = require_profile(&db, &profile_id)?;
+    rcon::get_bans(&p.ip_address, p.rcon_port, &p.rcon_password).await
+}
+
+#[tauri::command]
+pub async fn unban_player(
+    db: State<'_, Db>,
+    profile_id: String,
+    steam_id: String,
+) -> Result<String> {
+    if steam_id.trim().is_empty() {
+        return Err(AppError::invalid_input("steamId is required"));
+    }
+    let p = require_profile(&db, &profile_id)?;
+    let response = rcon::send_command(
+        &p.ip_address,
+        p.rcon_port,
+        &p.rcon_password,
+        &format!("unban \"{steam_id}\""),
+    )
+    .await?;
+    let _ = activity::record(
+        &db,
+        Some(&profile_id),
+        "player.unban",
+        Some(&steam_id),
+        ActivityStatus::Ok,
+        Some(&truncate(&response, 200)),
+    );
+    Ok(response)
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +389,8 @@ pub async fn install_plugin(
         file_path: path.to_string_lossy().into_owned(),
         enabled: true,
         has_config: false,
+        permissions: Vec::new(),
+        chat_commands: Vec::new(),
     })
 }
 
@@ -468,6 +507,95 @@ pub async fn check_common_dependencies(
 ) -> Result<DependencyStatus> {
     let p = require_profile(&db, &profile_id)?;
     dependencies::check_common_dependencies(&p.server_directory).await
+}
+
+// ---------------------------------------------------------------------------
+//  Local plugin install (drop a .cs file picked from disk)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn install_local_plugin(
+    db: State<'_, Db>,
+    profile_id: String,
+    source_path: String,
+) -> Result<InstalledPlugin> {
+    let p = require_profile(&db, &profile_id)?;
+    let (installed, _path) =
+        plugins::install_local_plugin(&p.server_directory, Path::new(&source_path)).await?;
+
+    let _ = rcon::send_command(
+        &p.ip_address,
+        p.rcon_port,
+        &p.rcon_password,
+        &format!("oxide.load {}", installed.name),
+    )
+    .await;
+
+    let _ = activity::record(
+        &db,
+        Some(&profile_id),
+        "plugin.install_local",
+        Some(&installed.name),
+        ActivityStatus::Ok,
+        Some(&source_path),
+    );
+    Ok(installed)
+}
+
+// ---------------------------------------------------------------------------
+//  Wipe schedule
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_wipe_schedule(
+    db: State<'_, Db>,
+    profile_id: String,
+) -> Result<Option<WipeSchedule>> {
+    require_profile(&db, &profile_id)?;
+    wipe_schedule::get(&db, &profile_id)
+}
+
+#[tauri::command]
+pub fn set_wipe_schedule(
+    db: State<'_, Db>,
+    profile_id: String,
+    cadence_days: u32,
+    last_wipe_at: Option<String>,
+    notes: Option<String>,
+) -> Result<WipeSchedule> {
+    require_profile(&db, &profile_id)?;
+    let last = last_wipe_at
+        .as_deref()
+        .map(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .map(|d| d.with_timezone(&chrono::Utc))
+                .map_err(|e| AppError::invalid_input(format!("lastWipeAt: {e}")))
+        })
+        .transpose()?;
+    wipe_schedule::upsert(&db, &profile_id, cadence_days, last, notes.as_deref())
+}
+
+#[tauri::command]
+pub fn mark_wiped_now(
+    db: State<'_, Db>,
+    profile_id: String,
+) -> Result<WipeSchedule> {
+    require_profile(&db, &profile_id)?;
+    let s = wipe_schedule::mark_wiped_now(&db, &profile_id)?;
+    let _ = activity::record(
+        &db,
+        Some(&profile_id),
+        "wipe.marked",
+        None,
+        ActivityStatus::Info,
+        Some(&format!("cadence: {} days", s.cadence_days)),
+    );
+    Ok(s)
+}
+
+#[tauri::command]
+pub fn delete_wipe_schedule(db: State<'_, Db>, profile_id: String) -> Result<()> {
+    wipe_schedule::delete(&db, &profile_id)
 }
 
 // ---------------------------------------------------------------------------

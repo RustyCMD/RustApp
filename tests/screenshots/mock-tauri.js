@@ -34,16 +34,16 @@
   ];
 
   const INSTALLED = [
-    { name: "Vanish",         author: "Whispers88",      version: "1.7.0",  description: "Allows players with permission to become invisible.",  filePath: "/srv/rust/main/oxide/plugins/Vanish.cs",         enabled: true,  hasConfig: true  },
-    { name: "Kits",           author: "k1lly0u",         version: "4.2.4",  description: "Loadout system for players, with permissions and cooldowns.", filePath: "/srv/rust/main/oxide/plugins/Kits.cs",         enabled: true,  hasConfig: true  },
-    { name: "ZoneManager",    author: "k1lly0u",         version: "3.0.34", description: "Define areas of the map and apply rules to players in them.", filePath: "/srv/rust/main/oxide/plugins/ZoneManager.cs", enabled: true,  hasConfig: true  },
-    { name: "RemoverTool",    author: "Reneb, Fuji",     version: "5.0.4",  description: "Lets players remove deployables they own.",            filePath: "/srv/rust/main/oxide/plugins/RemoverTool.cs",   enabled: true,  hasConfig: true  },
-    { name: "Backpacks",      author: "WhiteThunder",    version: "3.13.4", description: "Gives players a backpack accessible from anywhere.",   filePath: "/srv/rust/main/oxide/plugins/Backpacks.cs",     enabled: true,  hasConfig: true  },
-    { name: "ServerRewards",  author: "k1lly0u",         version: "1.6.0",  description: "Reward currency, store, and exchange for the server.", filePath: "/srv/rust/main/oxide/plugins/ServerRewards.cs", enabled: false, hasConfig: true  },
-    { name: "DiscordCore",    author: "MJSU",            version: "2.0.10", description: "Shared Discord bot framework other plugins depend on.", filePath: "/srv/rust/main/oxide/plugins/DiscordCore.cs",   enabled: true,  hasConfig: true  },
-    { name: "BetterChat",     author: "LaserHydra",      version: "5.2.7",  description: "Customisable chat formatting + permissions.",          filePath: "/srv/rust/main/oxide/plugins/BetterChat.cs",    enabled: true,  hasConfig: true  },
-    { name: "Clans",          author: "k1lly0u",         version: "0.5.6",  description: "Player-run clans, with chat, ally lists and TC sharing.", filePath: "/srv/rust/main/oxide/plugins/Clans.cs",     enabled: true,  hasConfig: true  },
-    { name: "PlaytimeTracker",author: "MJSU",            version: "0.4.1",  description: "Tracks playtime per Steam ID.",                        filePath: "/srv/rust/main/oxide/plugins/PlaytimeTracker.cs", enabled: false, hasConfig: false },
+    { name: "Vanish",         author: "Whispers88",      version: "1.7.0",  description: "Allows players with permission to become invisible.",  filePath: "/srv/rust/main/oxide/plugins/Vanish.cs",         enabled: true,  hasConfig: true, permissions: ["vanish.use","vanish.permanent","vanish.hidefromadmins"], chatCommands: ["vanish"]  },
+    { name: "Kits",           author: "k1lly0u",         version: "4.2.4",  description: "Loadout system for players, with permissions and cooldowns.", filePath: "/srv/rust/main/oxide/plugins/Kits.cs",         enabled: true,  hasConfig: true, permissions: ["kits.use","kits.admin","kits.kits"], chatCommands: ["kit"]  },
+    { name: "ZoneManager",    author: "k1lly0u",         version: "3.0.34", description: "Define areas of the map and apply rules to players in them.", filePath: "/srv/rust/main/oxide/plugins/ZoneManager.cs", enabled: true,  hasConfig: true  , permissions: ["zonemanager.use", "zonemanager.admin", "zonemanager.ignoreflag"], chatCommands: ["zone", "zones"] },
+    { name: "RemoverTool",    author: "Reneb, Fuji",     version: "5.0.4",  description: "Lets players remove deployables they own.",            filePath: "/srv/rust/main/oxide/plugins/RemoverTool.cs",   enabled: true,  hasConfig: true  , permissions: ["removertool.normal", "removertool.admin", "removertool.target"], chatCommands: ["remove"] },
+    { name: "Backpacks",      author: "WhiteThunder",    version: "3.13.4", description: "Gives players a backpack accessible from anywhere.",   filePath: "/srv/rust/main/oxide/plugins/Backpacks.cs",     enabled: true,  hasConfig: true  , permissions: ["backpacks.use", "backpacks.admin", "backpacks.gui", "backpacks.size.large"], chatCommands: ["backpack", "backpacks"] },
+    { name: "ServerRewards",  author: "k1lly0u",         version: "1.6.0",  description: "Reward currency, store, and exchange for the server.", filePath: "/srv/rust/main/oxide/plugins/ServerRewards.cs", enabled: false, hasConfig: true  , permissions: ["serverrewards.canearn", "serverrewards.cansend", "serverrewards.admin"], chatCommands: ["rp", "store", "rewardrp"] },
+    { name: "DiscordCore",    author: "MJSU",            version: "2.0.10", description: "Shared Discord bot framework other plugins depend on.", filePath: "/srv/rust/main/oxide/plugins/DiscordCore.cs",   enabled: true,  hasConfig: true  , permissions: ["discordcore.admin"], chatCommands: [] },
+    { name: "BetterChat",     author: "LaserHydra",      version: "5.2.7",  description: "Customisable chat formatting + permissions.",          filePath: "/srv/rust/main/oxide/plugins/BetterChat.cs",    enabled: true,  hasConfig: true, permissions: ["betterchat.admin","betterchat.formatting"], chatCommands: ["chat"]  },
+    { name: "Clans",          author: "k1lly0u",         version: "0.5.6",  description: "Player-run clans, with chat, ally lists and TC sharing.", filePath: "/srv/rust/main/oxide/plugins/Clans.cs",     enabled: true,  hasConfig: true  , permissions: ["clans.create", "clans.invite", "clans.kick", "clans.leader"], chatCommands: ["clan", "c"] },
+    { name: "PlaytimeTracker",author: "MJSU",            version: "0.4.1",  description: "Tracks playtime per Steam ID.",                        filePath: "/srv/rust/main/oxide/plugins/PlaytimeTracker.cs", enabled: false, hasConfig: false , permissions: [], chatCommands: [] },
   ];
 
   const STORE_ITEMS = [
@@ -65,6 +65,22 @@
     { steamId: "76561198000000004", name: "Roof_Camper",  ping: 102, connectedSeconds: 22310, address: "203.0.113.88:50118"  },
     { steamId: "76561198000000005", name: "Sister_Stoned",ping: 19,  connectedSeconds: 47210, address: "198.51.100.4:51000"  },
   ];
+
+  const BANS = [
+    { steamId: "76561198100000001", name: "AimbotAndy",   reason: "EAC kick (cheating)",     expiresAt: null },
+    { steamId: "76561198100000002", name: "WallhaxxX",    reason: "ESP / wallhack",          expiresAt: null },
+    { steamId: "76561198100000003", name: "BMODE",        reason: "Toxic chat",              expiresAt: "2026-05-21T00:00:00.000Z" },
+    { steamId: "76561198100000004", name: "tinyturtle",   reason: "Racism in chat",          expiresAt: null },
+    { steamId: "76561198100000005", name: "Marvin",       reason: "Door camping admin spawn", expiresAt: "2026-06-01T00:00:00.000Z" },
+  ];
+
+  const WIPE_SCHEDULE = {
+    profileId: PROFILES[0].id,
+    cadenceDays: 7,
+    lastWipeAt: "2026-05-01T18:00:00.000Z",
+    nextWipeAt: "2026-05-08T18:00:00.000Z",
+    notes: "Force-wipe day. Map seed rolls every 4 weeks. Announce in #server-news 2h before.",
+  };
 
   const ACTIVITY = [
     { id: 14, timestamp: "2026-05-07T11:08:14.000Z", profileId: PROFILES[0].id, action: "plugin.update_all",  target: null,                    status: "ok",    message: "2 updated, 0 failed" },
@@ -117,6 +133,8 @@
       raw: '{"Hostname":"Main PvP Server","Map":"Procedural Map","Players":87}',
     }),
     get_player_list: () => PLAYERS,
+    get_bans: () => BANS,
+    unban_player: () => "Unbanned.",
 
     // ---------- installed plugins ----------
     get_installed_plugins: () => INSTALLED,
@@ -124,6 +142,41 @@
     disable_plugin: () => null,
     reload_plugin: () => "Plugin reloaded.",
     uninstall_plugin: (a) => [`/srv/rust/main/oxide/plugins/${a.pluginName}.cs`],
+    install_local_plugin: (a) => ({
+      name: "MyLocalPlugin",
+      author: "you",
+      version: "0.1.0",
+      description: "Locally-installed plugin (mock).",
+      filePath: `/srv/rust/main/oxide/plugins/MyLocalPlugin.cs`,
+      enabled: true,
+      hasConfig: false,
+      permissions: [],
+      chatCommands: [],
+      _source: a.sourcePath, // unused, just to silence "unused arg"
+    }),
+
+    // Wipe schedule
+    get_wipe_schedule: () => WIPE_SCHEDULE,
+    set_wipe_schedule: (a) => ({
+      profileId: a.profileId,
+      cadenceDays: a.cadenceDays,
+      lastWipeAt: a.lastWipeAt ?? null,
+      nextWipeAt: a.lastWipeAt
+        ? new Date(new Date(a.lastWipeAt).getTime() + a.cadenceDays * 86400_000).toISOString()
+        : null,
+      notes: a.notes ?? null,
+    }),
+    mark_wiped_now: () => {
+      const now = new Date().toISOString();
+      return {
+        profileId: WIPE_SCHEDULE.profileId,
+        cadenceDays: WIPE_SCHEDULE.cadenceDays,
+        lastWipeAt: now,
+        nextWipeAt: new Date(Date.now() + WIPE_SCHEDULE.cadenceDays * 86400_000).toISOString(),
+        notes: WIPE_SCHEDULE.notes,
+      };
+    },
+    delete_wipe_schedule: () => null,
 
     // ---------- configs ----------
     load_plugin_config: () =>

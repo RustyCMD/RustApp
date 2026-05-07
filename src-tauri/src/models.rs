@@ -57,6 +57,14 @@ pub struct InstalledPlugin {
     pub file_path: String,
     pub enabled: bool,
     pub has_config: bool,
+    /// Permission strings the plugin registers via
+    /// `permission.RegisterPermission("...", this)`. Useful for setting
+    /// up groups without grepping the source.
+    #[serde(default)]
+    pub permissions: Vec<String>,
+    /// Chat commands the plugin registers via `cmd.AddChatCommand(...)`.
+    #[serde(default)]
+    pub chat_commands: Vec<String>,
 }
 
 /// One plugin where the installed version is older than the latest in the store.
@@ -197,4 +205,30 @@ pub struct ProfileExport {
 
 impl ProfileExport {
     pub const CURRENT_VERSION: u32 = 1;
+}
+
+/// One row from the server's `banlistex` reply.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BanInfo {
+    pub steam_id: String,
+    pub name: String,
+    pub reason: Option<String>,
+    /// `None` for permanent bans; otherwise the unix timestamp the ban
+    /// expires at.
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// User-configured wipe cadence for one server. `next_wipe_at` is computed
+/// at fetch time from `last_wipe_at + cadence_days` so the frontend doesn't
+/// need to repeat the math.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WipeSchedule {
+    pub profile_id: String,
+    /// Days between wipes. 7 = weekly, 14 = biweekly, 28 = monthly-ish.
+    pub cadence_days: u32,
+    pub last_wipe_at: Option<DateTime<Utc>>,
+    pub next_wipe_at: Option<DateTime<Utc>>,
+    pub notes: Option<String>,
 }

@@ -12,6 +12,7 @@ import PluginStorePage from "@/pages/PluginStore";
 import ConsolePage from "@/pages/Console";
 import PlayersPage from "@/pages/Players";
 import ActivityPage from "@/pages/Activity";
+import ServersPage from "@/pages/Servers";
 
 export default function App() {
   const load = useServerStore((s) => s.load);
@@ -30,6 +31,7 @@ export default function App() {
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/servers" element={<ServersPage />} />
             <Route path="/installed" element={<InstalledPluginsPage />} />
             <Route path="/store" element={<PluginStorePage />} />
             <Route path="/players" element={<PlayersPage />} />

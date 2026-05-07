@@ -8,12 +8,15 @@ import {
   Sparkles,
   Square,
   Trash2,
+  Upload,
 } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   checkForPluginUpdates,
   disablePlugin,
   enablePlugin,
   getInstalledPlugins,
+  installLocalPlugin,
   reloadPlugin,
   uninstallPlugin,
   updateAllPlugins,
@@ -21,6 +24,7 @@ import {
 import { useToast } from "@/components/Toast";
 import InstalledPluginRow from "@/components/InstalledPluginRow";
 import ConfigFileEditor from "@/components/ConfigFileEditor";
+import PluginInfoModal from "@/components/PluginInfoModal";
 import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import { useUpdateStore } from "@/state/updateStore";
@@ -47,8 +51,25 @@ export default function InstalledPluginsList({
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<InstalledPlugin | null>(null);
+  const [inspecting, setInspecting] = useState<InstalledPlugin | null>(null);
   const [bulkRunning, setBulkRunning] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  async function pickAndInstallLocal() {
+    try {
+      const picked = await openDialog({
+        title: "Install a local plugin (.cs file)",
+        multiple: false,
+        filters: [{ name: "C# source", extensions: ["cs"] }],
+      });
+      if (typeof picked !== "string") return;
+      const installed = await installLocalPlugin(profileId, picked);
+      toast.push(`Installed ${installed.name}`, "ok");
+      reload();
+    } catch (e) {
+      toast.push(formatError(e), "error");
+    }
+  }
 
   const reload = useCallback(async () => {
     setPlugins(null);
@@ -232,6 +253,10 @@ export default function InstalledPluginsList({
           <button onClick={reload} title="Refresh" className="ghost icon">
             <RefreshCw size={16} />
           </button>
+          <button onClick={pickAndInstallLocal} title="Install a local .cs file">
+            <Upload size={14} />
+            Install local…
+          </button>
           <button
             className="primary"
             onClick={onUpdateAll}
@@ -361,6 +386,7 @@ export default function InstalledPluginsList({
                     refreshUpdates();
                   }}
                   onConfigure={setEditing}
+                  onInspect={setInspecting}
                 />
               ))}
             </tbody>
@@ -373,6 +399,13 @@ export default function InstalledPluginsList({
           profileId={profileId}
           plugin={editing}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {inspecting && (
+        <PluginInfoModal
+          plugin={inspecting}
+          onClose={() => setInspecting(null)}
         />
       )}
     </div>

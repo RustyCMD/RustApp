@@ -23,6 +23,7 @@ import type {
 } from "@/types/models";
 import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
+import WipeScheduleCard from "@/components/WipeScheduleCard";
 
 export default function Dashboard() {
   const profile = useSelectedProfile();
@@ -156,6 +157,10 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <div className="grid-2" style={{ marginBottom: 0 }}>
+        <WipeScheduleCard profileId={profile.id} />
+      </div>
 
       <div className="grid-2">
         <div className="card">

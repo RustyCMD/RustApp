@@ -34,6 +34,18 @@ static INFO_RE: Lazy<Regex> = Lazy::new(|| {
 static DESC_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?m)\[\s*Description\s*\(\s*"([^"]*)"\s*\)\s*\]"#).expect("DESC_RE")
 });
+// `permission.RegisterPermission("foo.bar", this)` — usually appears once
+// per perm in `OnServerInitialized` / `Init` / `Loaded`.
+static PERM_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"permission\.RegisterPermission\s*\(\s*"([^"]+)""#).expect("PERM_RE")
+});
+// `cmd.AddChatCommand("kit", this, …)` or `[ChatCommand("kit")]`.
+static CHATCMD_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r#"(?:cmd\.AddChatCommand\s*\(\s*"([^"]+)"|\[\s*ChatCommand\s*\(\s*"([^"]+)")"#,
+    )
+    .expect("CHATCMD_RE")
+});
 
 /// Walk both `oxide/plugins` and `oxide/plugins/disabled` and return every
 /// `.cs` plugin we can identify.
@@ -83,6 +95,9 @@ async fn parse_plugin_file(
     server_dir: &str,
 ) -> Result<InstalledPlugin> {
     let text = fs::read_to_string(path).await?;
+    // Header metadata sits in the first ~8KB; permissions / commands can
+    // appear anywhere in the file (often inside Init), so we scan the
+    // whole source for those.
     let head = text.chars().take(8 * 1024).collect::<String>();
 
     let (name, author, version) = if let Some(c) = INFO_RE.captures(&head) {
@@ -111,6 +126,24 @@ async fn parse_plugin_file(
         .exists()
         || config_path(server_dir, &resolved_name, crate::models::ConfigKind::Ini).exists();
 
+    let mut permissions: Vec<String> = PERM_RE
+        .captures_iter(&text)
+        .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
+        .collect();
+    permissions.sort();
+    permissions.dedup();
+
+    let mut chat_commands: Vec<String> = CHATCMD_RE
+        .captures_iter(&text)
+        .filter_map(|c| {
+            c.get(1)
+                .or_else(|| c.get(2))
+                .map(|m| m.as_str().to_string())
+        })
+        .collect();
+    chat_commands.sort();
+    chat_commands.dedup();
+
     Ok(InstalledPlugin {
         name: resolved_name,
         author,
@@ -119,6 +152,8 @@ async fn parse_plugin_file(
         file_path: path.to_string_lossy().into_owned(),
         enabled,
         has_config,
+        permissions,
+        chat_commands,
     })
 }
 
@@ -171,6 +206,46 @@ pub async fn install_plugin_file(
     let target = dir.join(format!("{plugin_name}.cs"));
     fs::write(&target, file_content).await?;
     Ok(target)
+}
+
+/// Read a `.cs` file from anywhere on disk and install it into the
+/// server's `oxide/plugins/` directory. The plugin name is taken from
+/// the file's `[Info(...)]` attribute, falling back to the filename
+/// stem. Returns the parsed plugin metadata + the destination path.
+pub async fn install_local_plugin(
+    server_dir: &str,
+    source_path: &Path,
+) -> Result<(InstalledPlugin, PathBuf)> {
+    if source_path.extension().and_then(|s| s.to_str()) != Some("cs") {
+        return Err(AppError::invalid_input(
+            "expected a .cs file (uMod plugins are C# source)",
+        ));
+    }
+
+    let bytes = fs::read(source_path).await?;
+    let text = String::from_utf8_lossy(&bytes);
+
+    let info_name = INFO_RE
+        .captures(&text)
+        .and_then(|c| c.get(1).map(|m| m.as_str().to_string()));
+    let stem = source_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string());
+
+    let plugin_name = info_name.or(stem).ok_or_else(|| {
+        AppError::plugin_parse(format!(
+            "could not derive a plugin name from {}",
+            source_path.display()
+        ))
+    })?;
+
+    let target = install_plugin_file(server_dir, &plugin_name, &bytes).await?;
+
+    // Parse the freshly-installed file so the caller gets the same shape
+    // it would from a fresh scan (including the new permissions list).
+    let installed = parse_plugin_file(&target, true, server_dir).await?;
+    Ok((installed, target))
 }
 
 /// Remove `<plugin>.cs` (from either enabled/ or disabled/). Optionally also

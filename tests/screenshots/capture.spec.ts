@@ -23,12 +23,13 @@ interface Route {
 
 const ROUTES: Route[] = [
   { url: "/",          name: "01-dashboard", ready: ".stat-tile" },
-  { url: "/installed", name: "02-installed", ready: "table tbody tr" },
-  { url: "/store",     name: "03-store",     ready: ".plugin-card-mod" },
-  { url: "/players",   name: "04-players",   ready: "table tbody tr" },
-  { url: "/console",   name: "05-console",   ready: ".console" },
-  { url: "/activity",  name: "06-activity",  ready: "table tbody tr" },
-  { url: "/settings",  name: "07-settings",  ready: "form.grid" },
+  { url: "/servers",   name: "02-servers",   ready: ".server-card" },
+  { url: "/installed", name: "03-installed", ready: "table tbody tr" },
+  { url: "/store",     name: "04-store",     ready: ".plugin-card-mod" },
+  { url: "/players",   name: "05-players",   ready: "table tbody tr" },
+  { url: "/console",   name: "06-console",   ready: ".console" },
+  { url: "/activity",  name: "07-activity",  ready: "table tbody tr" },
+  { url: "/settings",  name: "08-settings",  ready: "form.grid" },
 ];
 
 const THEMES = ["dark", "light"] as const;

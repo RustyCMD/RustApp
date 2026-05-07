@@ -5,6 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   ActivityEntry,
+  BanInfo,
   BulkUpdateResult,
   ConfigBackup,
   ConfigKind,
@@ -20,6 +21,7 @@ import type {
   ServerProfile,
   ServerProfileInput,
   ServerStatus,
+  WipeSchedule,
 } from "@/types/models";
 
 // ---------- Server profiles ----------
@@ -51,6 +53,12 @@ export const getServerStatus = (profileId: string) =>
 export const getPlayerList = (profileId: string) =>
   invoke<PlayerInfo[]>("get_player_list", { profileId });
 
+export const getBans = (profileId: string) =>
+  invoke<BanInfo[]>("get_bans", { profileId });
+
+export const unbanPlayer = (profileId: string, steamId: string) =>
+  invoke<string>("unban_player", { profileId, steamId });
+
 // ---------- Installed plugins ----------
 
 export const getInstalledPlugins = (profileId: string) =>
@@ -71,6 +79,9 @@ export const uninstallPlugin = (
   deleteConfig: boolean,
 ) =>
   invoke<string[]>("uninstall_plugin", { profileId, pluginName, deleteConfig });
+
+export const installLocalPlugin = (profileId: string, sourcePath: string) =>
+  invoke<InstalledPlugin>("install_local_plugin", { profileId, sourcePath });
 
 // ---------- Plugin configs ----------
 
@@ -129,6 +140,30 @@ export const updateAllPlugins = (profileId: string) =>
 
 export const checkCommonDependencies = (profileId: string) =>
   invoke<DependencyStatus>("check_common_dependencies", { profileId });
+
+// ---------- Wipe schedule ----------
+
+export const getWipeSchedule = (profileId: string) =>
+  invoke<WipeSchedule | null>("get_wipe_schedule", { profileId });
+
+export const setWipeSchedule = (
+  profileId: string,
+  cadenceDays: number,
+  lastWipeAt: string | null,
+  notes: string | null,
+) =>
+  invoke<WipeSchedule>("set_wipe_schedule", {
+    profileId,
+    cadenceDays,
+    lastWipeAt,
+    notes,
+  });
+
+export const markWipedNow = (profileId: string) =>
+  invoke<WipeSchedule>("mark_wiped_now", { profileId });
+
+export const deleteWipeSchedule = (profileId: string) =>
+  invoke<void>("delete_wipe_schedule", { profileId });
 
 // ---------- Activity log ----------
 

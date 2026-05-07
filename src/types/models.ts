@@ -30,6 +30,22 @@ export interface SavedCommand {
   createdAt: string;
 }
 
+export interface BanInfo {
+  steamId: string;
+  name: string;
+  reason: string | null;
+  /** ISO timestamp; null = permanent ban. */
+  expiresAt: string | null;
+}
+
+export interface WipeSchedule {
+  profileId: string;
+  cadenceDays: number;
+  lastWipeAt: string | null;
+  nextWipeAt: string | null;
+  notes: string | null;
+}
+
 export interface PluginMetaData {
   slug: string;
   name: string;
@@ -49,6 +65,8 @@ export interface InstalledPlugin {
   filePath: string;
   enabled: boolean;
   hasConfig: boolean;
+  permissions: string[];
+  chatCommands: string[];
 }
 
 export interface PluginUpdateInfo {

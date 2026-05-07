@@ -14,6 +14,7 @@ mod rcon;
 mod saved_commands;
 mod umod_scraper;
 mod utils;
+mod wipe_schedule;
 
 use database::Db;
 use tauri::Manager;
@@ -40,6 +41,7 @@ pub fn run() {
             let db = Db::open(&data_dir.join("rustapp.sqlite"))?;
             activity::migrate(&db)?;
             saved_commands::migrate(&db)?;
+            wipe_schedule::migrate(&db)?;
             app.manage(db);
             Ok(())
         })
@@ -54,12 +56,20 @@ pub fn run() {
             commands::send_rcon_command,
             commands::get_server_status,
             commands::get_player_list,
+            commands::get_bans,
+            commands::unban_player,
             // installed plugins
             commands::get_installed_plugins,
             commands::enable_plugin,
             commands::disable_plugin,
             commands::reload_plugin,
             commands::uninstall_plugin,
+            commands::install_local_plugin,
+            // wipe schedule
+            commands::get_wipe_schedule,
+            commands::set_wipe_schedule,
+            commands::mark_wiped_now,
+            commands::delete_wipe_schedule,
             // configs
             commands::load_plugin_config,
             commands::save_plugin_config,

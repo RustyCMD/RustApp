@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckSquare, Power, RefreshCw, Settings, Square, Trash2 } from "lucide-react";
+import { CheckSquare, Info, Power, RefreshCw, Settings, Square, Trash2 } from "lucide-react";
 import {
   disablePlugin,
   enablePlugin,
@@ -18,6 +18,7 @@ interface Props {
   onToggleSelected?: () => void;
   onChanged: () => void;
   onConfigure: (plugin: InstalledPlugin) => void;
+  onInspect?: (plugin: InstalledPlugin) => void;
 }
 
 export default function InstalledPluginRow({
@@ -28,6 +29,7 @@ export default function InstalledPluginRow({
   onToggleSelected,
   onChanged,
   onConfigure,
+  onInspect,
 }: Props) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -131,6 +133,15 @@ export default function InstalledPluginRow({
         >
           <RefreshCw size={15} />
         </button>
+        {onInspect && (
+          <button
+            className="ghost icon"
+            title="Plugin details (permissions, commands)"
+            onClick={() => onInspect(plugin)}
+          >
+            <Info size={15} />
+          </button>
+        )}
         <button
           className="ghost icon"
           title={plugin.hasConfig ? "Configure" : "No config file"}
