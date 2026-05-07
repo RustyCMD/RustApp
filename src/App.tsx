@@ -13,6 +13,7 @@ import ConsolePage from "@/pages/Console";
 import PlayersPage from "@/pages/Players";
 import ActivityPage from "@/pages/Activity";
 import ServersPage from "@/pages/Servers";
+import HelpPage from "@/pages/Help";
 
 export default function App() {
   const load = useServerStore((s) => s.load);
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/console" element={<ConsolePage />} />
             <Route path="/activity" element={<ActivityPage />} />
+            <Route path="/help" element={<HelpPage />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

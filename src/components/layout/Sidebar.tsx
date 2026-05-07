@@ -6,6 +6,7 @@ import {
   Users,
   Terminal,
   History,
+  HelpCircle,
   Server,
   Settings,
   type LucideIcon,
@@ -30,6 +31,7 @@ const MAIN: NavItem[] = [
 
 const META: NavItem[] = [
   { to: "/activity", label: "Activity Log", icon: History },
+  { to: "/help", label: "Setup & Help", icon: HelpCircle },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

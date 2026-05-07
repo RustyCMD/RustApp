@@ -29,7 +29,8 @@ const ROUTES: Route[] = [
   { url: "/players",   name: "05-players",   ready: "table tbody tr" },
   { url: "/console",   name: "06-console",   ready: ".console" },
   { url: "/activity",  name: "07-activity",  ready: "table tbody tr" },
-  { url: "/settings",  name: "08-settings",  ready: "form.grid" },
+  { url: "/help",      name: "08-help",      ready: ".setup-card" },
+  { url: "/settings",  name: "09-settings",  ready: "form.grid" },
 ];
 
 const THEMES = ["dark", "light"] as const;

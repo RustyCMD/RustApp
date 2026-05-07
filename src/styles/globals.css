@@ -486,6 +486,92 @@ form.grid .actions {
   font-family: ui-monospace, monospace;
 }
 
+/* Help / Setup page */
+.setup-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+.setup-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent);
+  margin-bottom: 12px;
+}
+.works-table {
+  font-size: 13px;
+}
+.works-table th:not(:first-child),
+.works-table .works-cell {
+  text-align: center;
+  width: 1%;
+  white-space: nowrap;
+}
+.works-table th:not(:first-child) {
+  padding-left: 14px; padding-right: 14px;
+}
+.works-cell svg { vertical-align: -2px; }
+
+.os-block {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 14px;
+  margin-top: 10px;
+}
+.os-block summary {
+  cursor: pointer;
+  padding: 12px 0;
+  user-select: none;
+}
+.os-block summary:hover { color: var(--accent); }
+.os-block[open] {
+  background: var(--bg-elevated);
+}
+.os-block ol, .os-block p { margin: 0 0 12px; }
+.os-block ol { padding-left: 20px; line-height: 1.55; }
+.os-block li { margin-bottom: 6px; }
+.os-block kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  background: var(--panel-2);
+}
+
+.callout {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-top: 16px;
+  align-items: flex-start;
+}
+.callout svg { flex-shrink: 0; margin-top: 2px; }
+.callout-info {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-strong);
+  color: var(--text);
+}
+.callout-info svg { color: var(--accent); }
+.callout-warn {
+  background: var(--warn-soft);
+  border: 1px solid rgba(210, 153, 34, 0.4);
+}
+.callout-warn svg { color: var(--warn); }
+
+ul.tips {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+ul.tips li { margin-bottom: 8px; }
+ul.tips li:last-child { margin-bottom: 0; }
+
 /* Server overview grid (one card per configured server) */
 .server-grid {
   display: grid;
