@@ -17,10 +17,7 @@ pub async fn load(
     validate_plugin_name(plugin_name)?;
     let path = config_path(server_dir, plugin_name, kind);
     if !path.exists() {
-        return Err(AppError::not_found(format!(
-            "config not found at {}",
-            path.display()
-        )));
+        return Err(AppError::config_not_found(path.display().to_string()));
     }
     let content = fs::read_to_string(&path).await?;
     Ok((path, content))
@@ -102,9 +99,9 @@ pub async fn read_backup(
     let canon_dir = fs::canonicalize(&backups).await?;
     let canon_file = fs::canonicalize(&candidate)
         .await
-        .map_err(|_| AppError::not_found(format!("backup {file_name} not found")))?;
+        .map_err(|_| AppError::backup_not_found(file_name))?;
     if !canon_file.starts_with(&canon_dir) {
-        return Err(AppError::invalid_input("backup path escapes backups dir"));
+        return Err(AppError::BackupPathEscape);
     }
     let content = fs::read_to_string(&canon_file).await?;
     Ok(content)
@@ -169,11 +166,11 @@ fn validate_content(kind: ConfigKind, content: &str) -> Result<()> {
     match kind {
         ConfigKind::Json => {
             serde_json::from_str::<serde_json::Value>(content)
-                .map_err(|e| AppError::invalid_input(format!("invalid JSON: {e}")))?;
+                .map_err(|e| AppError::invalid_json(e.to_string()))?;
         }
         ConfigKind::Ini => {
             ini::Ini::load_from_str(content)
-                .map_err(|e| AppError::invalid_input(format!("invalid INI: {e}")))?;
+                .map_err(|e| AppError::invalid_ini(e.to_string()))?;
         }
     }
     Ok(())

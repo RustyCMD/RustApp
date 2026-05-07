@@ -53,7 +53,7 @@ pub fn get_server_profiles(db: State<'_, Db>) -> Result<Vec<ServerProfile>> {
 #[tauri::command]
 pub fn get_server_profile(db: State<'_, Db>, id: String) -> Result<ServerProfile> {
     db.get_profile_by_id(&id)?
-        .ok_or_else(|| AppError::not_found(format!("profile {id}")))
+        .ok_or_else(|| AppError::profile_not_found(id))
 }
 
 #[tauri::command]
@@ -326,11 +326,11 @@ pub async fn install_plugin(
     let p = require_profile(&db, &profile_id)?;
     let meta = db
         .get_umod_by_slug(&plugin_slug)?
-        .ok_or_else(|| AppError::not_found(format!("plugin {plugin_slug} not in cache")))?;
+        .ok_or_else(|| AppError::plugin_not_found(plugin_slug.clone()))?;
     let url = meta
         .download_url
         .as_deref()
-        .ok_or_else(|| AppError::invalid_input("plugin has no download_url"))?;
+        .ok_or(AppError::StoreNoDownloadUrl)?;
 
     let bytes = umod_scraper::download_plugin(url).await?;
     let plugin_name = meta.name.clone();
@@ -551,14 +551,10 @@ pub async fn export_profiles_to_path(db: State<'_, Db>, path: String) -> Result<
 #[tauri::command]
 pub async fn import_profiles_from_path(db: State<'_, Db>, path: String) -> Result<u32> {
     let body = tokio::fs::read_to_string(&path).await?;
-    let payload: ProfileExport = serde_json::from_str(&body).map_err(|e| {
-        AppError::invalid_input(format!("export file is not valid JSON: {e}"))
-    })?;
+    let payload: ProfileExport = serde_json::from_str(&body)
+        .map_err(|e| AppError::import_parse(e.to_string()))?;
     if payload.version > ProfileExport::CURRENT_VERSION {
-        return Err(AppError::invalid_input(format!(
-            "export was written by a newer version of RustApp ({}); upgrade and try again",
-            payload.version
-        )));
+        return Err(AppError::ImportVersionTooNew(payload.version));
     }
     let count = payload.profiles.len() as u32;
     for profile in &payload.profiles {
@@ -581,7 +577,7 @@ pub async fn import_profiles_from_path(db: State<'_, Db>, path: String) -> Resul
 
 fn require_profile(db: &State<'_, Db>, id: &str) -> Result<ServerProfile> {
     db.get_profile_by_id(id)?
-        .ok_or_else(|| AppError::not_found(format!("profile {id}")))
+        .ok_or_else(|| AppError::profile_not_found(id.to_string()))
 }
 
 fn truncate(s: &str, max: usize) -> String {

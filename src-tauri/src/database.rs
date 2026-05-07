@@ -34,7 +34,7 @@ impl Db {
         let guard = self
             .0
             .lock()
-            .map_err(|_| AppError::other("database mutex poisoned"))?;
+            .map_err(|_| AppError::DatabasePoisoned)?;
         f(&guard)
     }
 
@@ -53,6 +53,7 @@ impl Db {
                     rcon_port        INTEGER NOT NULL,
                     rcon_password    TEXT NOT NULL,
                     server_directory TEXT NOT NULL,
+                    notes            TEXT,
                     created_at       TEXT NOT NULL,
                     updated_at       TEXT NOT NULL
                 );
@@ -70,10 +71,6 @@ impl Db {
                 );
                 "#,
             )?;
-            // Idempotent forward-migrations for users who created the DB on
-            // an older schema. SQLite returns a "duplicate column name"
-            // error when the column already exists; that's our success case.
-            add_column_if_missing(c, "server_profiles", "notes", "TEXT")?;
             Ok(())
         })
     }
@@ -156,7 +153,7 @@ impl Db {
             .map_err(AppError::from)
         })?;
         if rows == 0 {
-            return Err(AppError::not_found(format!("profile {}", updated.id)));
+            return Err(AppError::profile_not_found(updated.id.clone()));
         }
         Ok(updated)
     }
@@ -167,7 +164,7 @@ impl Db {
                 .map_err(AppError::from)
         })?;
         if rows == 0 {
-            return Err(AppError::not_found(format!("profile {id}")));
+            return Err(AppError::profile_not_found(id));
         }
         Ok(())
     }
@@ -286,27 +283,6 @@ fn row_to_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<ServerProfile> {
         created_at: parse_dt(&row.get::<_, String>(7)?),
         updated_at: parse_dt(&row.get::<_, String>(8)?),
     })
-}
-
-/// `ALTER TABLE … ADD COLUMN` is non-idempotent in SQLite — calling twice
-/// returns "duplicate column name", which we swallow so first-run upgrades
-/// from an older schema are seamless.
-fn add_column_if_missing(
-    c: &Connection,
-    table: &str,
-    column: &str,
-    type_decl: &str,
-) -> Result<()> {
-    let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {type_decl}");
-    match c.execute(&sql, []) {
-        Ok(_) => Ok(()),
-        Err(rusqlite::Error::SqliteFailure(_, Some(msg)))
-            if msg.contains("duplicate column name") =>
-        {
-            Ok(())
-        }
-        Err(e) => Err(e.into()),
-    }
 }
 
 fn row_to_meta(row: &rusqlite::Row<'_>) -> rusqlite::Result<PluginMetaData> {

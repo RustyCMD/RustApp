@@ -8,6 +8,7 @@ import {
 import { useServerStore } from "@/state/serverStore";
 import type { ServerProfile, ServerProfileInput } from "@/types/models";
 import { useToast } from "@/components/Toast";
+import { formatError } from "@/lib/errors";
 
 const empty: ServerProfileInput = {
   name: "",
@@ -51,7 +52,7 @@ export default function ServerProfileForm({ editing, onDone }: Props) {
       });
       if (typeof picked === "string") update("serverDirectory", picked);
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     }
   }
 
@@ -67,7 +68,7 @@ export default function ServerProfileForm({ editing, onDone }: Props) {
       onDone?.();
       if (!editing) setForm(empty);
     } catch (err) {
-      toast.push(String(err), "error");
+      toast.push(formatError(err), "error");
     } finally {
       setSaving(false);
     }

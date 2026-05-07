@@ -6,6 +6,7 @@ import { useToast } from "@/components/Toast";
 import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import type { PlayerInfo } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 const POLL_MS = 15_000;
 
@@ -22,7 +23,7 @@ export default function PlayersPage() {
       const list = await getPlayerList(profile.id);
       setPlayers(list);
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
       setPlayers([]);
     } finally {
       setLoading(false);
@@ -44,7 +45,7 @@ export default function PlayersPage() {
       toast.push(`Kicked ${p.name}`, "ok");
       reload();
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     }
   }
 
@@ -60,7 +61,7 @@ export default function PlayersPage() {
       toast.push(`Banned ${p.name}`, "ok");
       reload();
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     }
   }
 

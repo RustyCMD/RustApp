@@ -25,6 +25,7 @@ import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import { useUpdateStore } from "@/state/updateStore";
 import type { InstalledPlugin } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 type Filter = "all" | "enabled" | "disabled" | "updates";
 
@@ -50,7 +51,7 @@ export default function InstalledPluginsList({
       const list = await getInstalledPlugins(profileId);
       setPlugins(list);
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
       setPlugins([]);
     }
   }, [profileId, toast]);
@@ -128,7 +129,7 @@ export default function InstalledPluginsList({
         await op(name);
         ok++;
       } catch (e) {
-        failures.push([name, String(e)]);
+        failures.push([name, formatError(e)]);
       }
     }
     setBulkRunning(false);
@@ -174,7 +175,7 @@ export default function InstalledPluginsList({
       reload();
       refreshUpdates();
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     } finally {
       setBulkRunning(false);
     }

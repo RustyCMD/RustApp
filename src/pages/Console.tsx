@@ -5,6 +5,7 @@ import { useSelectedProfile } from "@/state/serverStore";
 import { useToast } from "@/components/Toast";
 import EmptyState from "@/components/EmptyState";
 import SavedCommands from "@/components/SavedCommands";
+import { formatError } from "@/lib/errors";
 
 type Line =
   | { kind: "system"; text: string; ts: number }
@@ -84,7 +85,7 @@ export default function ConsolePage() {
         { kind: "out", text: r.response || "(empty response)", ts: Date.now() },
       ]);
     } catch (err) {
-      const msg = String(err);
+      const msg = formatError(err);
       setLines((l) => [...l, { kind: "err", text: msg, ts: Date.now() }]);
       toast.push(msg, "error");
     } finally {

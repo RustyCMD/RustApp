@@ -5,6 +5,7 @@ import { useToast } from "@/components/Toast";
 import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import type { ActivityEntry } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 export default function ActivityPage() {
   const toast = useToast();
@@ -16,7 +17,7 @@ export default function ActivityPage() {
     try {
       setEntries(await listActivity(500));
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
       setEntries([]);
     }
   }, [toast]);
@@ -32,7 +33,7 @@ export default function ActivityPage() {
       setEntries([]);
       toast.push("Activity log cleared", "ok");
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     }
   }
 

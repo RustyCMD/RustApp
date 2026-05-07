@@ -3,6 +3,7 @@ import { Download, ExternalLink, Loader2 } from "lucide-react";
 import { installPlugin } from "@/api/tauriCommands";
 import { useToast } from "@/components/Toast";
 import type { PluginMetaData } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 interface Props {
   profileId: string | null;
@@ -25,7 +26,7 @@ export default function PluginCard({ profileId, plugin }: Props) {
       const installed = await installPlugin(profileId, plugin.slug);
       toast.push(`Installed ${installed.name}`, "ok");
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     } finally {
       setBusy(false);
     }

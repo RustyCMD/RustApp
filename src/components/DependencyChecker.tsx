@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { checkCommonDependencies } from "@/api/tauriCommands";
 import { useToast } from "@/components/Toast";
 import type { DependencyStatus } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 export default function DependencyChecker({ profileId }: { profileId: string }) {
   const toast = useToast();
@@ -13,7 +14,7 @@ export default function DependencyChecker({ profileId }: { profileId: string }) 
     try {
       setStatus(await checkCommonDependencies(profileId));
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     } finally {
       setLoading(false);
     }

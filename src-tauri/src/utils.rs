@@ -52,9 +52,7 @@ pub fn validate_plugin_name(name: &str) -> Result<()> {
         || name.contains('\\')
         || name.contains('\0')
     {
-        return Err(AppError::invalid_input(format!(
-            "invalid plugin name: {name:?}"
-        )));
+        return Err(AppError::invalid_plugin_name(name.to_string()));
     }
     Ok(())
 }

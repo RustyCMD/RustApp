@@ -11,6 +11,7 @@ import { useToast } from "@/components/Toast";
 import { useServerStore } from "@/state/serverStore";
 import { useThemeStore } from "@/state/themeStore";
 import type { ServerProfile } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 export default function Settings() {
   const [editing, setEditing] = useState<ServerProfile | null>(null);
@@ -31,7 +32,7 @@ export default function Settings() {
       const count = await exportProfilesToPath(path);
       toast.push(`Exported ${count} profile${count === 1 ? "" : "s"}`, "ok");
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     } finally {
       setBusy(false);
     }
@@ -50,7 +51,7 @@ export default function Settings() {
       toast.push(`Imported ${count} profile${count === 1 ? "" : "s"}`, "ok");
       reloadProfiles();
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     } finally {
       setBusy(false);
     }

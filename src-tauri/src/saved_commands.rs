@@ -81,7 +81,7 @@ pub fn delete(db: &Db, id: i64) -> Result<()> {
             .map_err(AppError::from)
     })?;
     if rows == 0 {
-        return Err(AppError::not_found(format!("saved command {id}")));
+        return Err(AppError::SavedCommandNotFound(id));
     }
     Ok(())
 }

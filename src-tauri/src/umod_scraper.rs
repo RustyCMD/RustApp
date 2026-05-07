@@ -148,11 +148,10 @@ pub async fn fetch_page(page: u32, search: Option<&str>) -> Result<PluginStorePa
         .query(&params)
         .send()
         .await?
-        .error_for_status()
-        .map_err(|e| AppError::scrape(format!("uMod search failed: {e}")))?;
+        .error_for_status()?;
 
     let api: ApiResponse = resp.json().await.map_err(|e| {
-        AppError::scrape(format!("uMod returned non-JSON for search.json: {e}"))
+        AppError::store_non_json(format!("search.json: {e}"))
     })?;
 
     let items = api.data.into_iter().map(into_meta).collect::<Vec<_>>();

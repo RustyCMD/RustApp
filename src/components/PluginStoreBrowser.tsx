@@ -6,6 +6,7 @@ import PluginCard from "@/components/PluginCard";
 import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import type { PluginStorePage } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 export default function PluginStoreBrowser({
   profileId,
@@ -24,7 +25,7 @@ export default function PluginStoreBrowser({
     setLoading(true);
     fetchUmodPlugins(page, search || undefined)
       .then((d) => alive && setData(d))
-      .catch((e) => alive && toast.push(String(e), "error"))
+      .catch((e) => alive && toast.push(formatError(e), "error"))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;

@@ -32,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div key={t.id} className={`toast ${t.tone}`}>
               <Icon size={18} />
-              <span>{t.text}</span>
+              <span>{renderToast(t.text)}</span>
             </div>
           );
         })}
@@ -45,4 +45,17 @@ export function useToast(): Ctx {
   const ctx = useContext(ToastCtx);
   if (!ctx) throw new Error("useToast outside ToastProvider");
   return ctx;
+}
+
+/** Renders trailing `[CODE]` from `formatError` output as monospace, so a
+ *  user can read the code at a glance and copy it cleanly. */
+function renderToast(text: string): ReactNode {
+  const m = text.match(/^(.*)\s\[([A-Z]+-\d+)\]$/);
+  if (!m) return text;
+  return (
+    <>
+      {m[1]}
+      <code style={{ marginLeft: 6, fontSize: 11, opacity: 0.75 }}>{m[2]}</code>
+    </>
+  );
 }

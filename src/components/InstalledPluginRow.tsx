@@ -7,6 +7,7 @@ import {
   uninstallPlugin,
 } from "@/api/tauriCommands";
 import { useToast } from "@/components/Toast";
+import { formatError } from "@/lib/errors";
 import type { InstalledPlugin } from "@/types/models";
 
 interface Props {
@@ -38,7 +39,7 @@ export default function InstalledPluginRow({
       toast.push(`${label}: ${plugin.name}`, "ok");
       onChanged();
     } catch (e) {
-      toast.push(`${label} failed: ${e}`, "error");
+      toast.push(`${label} failed: ${formatError(e)}`, "error");
     } finally {
       setBusy(false);
     }
@@ -56,7 +57,7 @@ export default function InstalledPluginRow({
       toast.push(`Uninstalled ${plugin.name}`, "ok");
       onChanged();
     } catch (e) {
-      toast.push(`Uninstall failed: ${e}`, "error");
+      toast.push(`Uninstall failed: ${formatError(e)}`, "error");
     } finally {
       setBusy(false);
     }

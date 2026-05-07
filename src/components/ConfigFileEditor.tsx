@@ -11,6 +11,7 @@ import { useToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import Skeleton from "@/components/Skeleton";
 import type { ConfigBackup, ConfigKind, InstalledPlugin } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 interface Props {
   profileId: string;
@@ -38,7 +39,7 @@ export default function ConfigFileEditor({ profileId, plugin, onClose }: Props) 
       .catch((e) => {
         if (!alive) return;
         setContent("");
-        toast.push(`Couldn't load ${kind} config: ${e}`, "error");
+        toast.push(`Couldn't load ${kind} config: ${formatError(e)}`, "error");
       })
       .finally(() => alive && setBusy(false));
     return () => {
@@ -54,7 +55,7 @@ export default function ConfigFileEditor({ profileId, plugin, onClose }: Props) 
       setDirty(false);
       onClose();
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     } finally {
       setBusy(false);
     }
@@ -166,7 +167,7 @@ function BackupBrowser({
     listConfigBackups(profileId, pluginName)
       .then(setBackups)
       .catch((e) => {
-        toast.push(String(e), "error");
+        toast.push(formatError(e), "error");
         setBackups([]);
       });
   }
@@ -178,7 +179,7 @@ function BackupBrowser({
       const content = await readConfigBackup(profileId, pluginName, b.fileName);
       setPreviewing({ file: b.fileName, content });
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     }
   }
 
@@ -192,7 +193,7 @@ function BackupBrowser({
       toast.push(`Restored from ${b.fileName}`, "ok");
       reload();
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     } finally {
       setBusy(false);
     }

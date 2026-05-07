@@ -104,7 +104,7 @@ async fn parse_plugin_file(
         .and_then(|s| s.to_str())
         .map(|s| s.to_string());
     let resolved_name = name.or(stem).ok_or_else(|| {
-        AppError::other(format!("could not derive name for {}", path.display()))
+        AppError::plugin_parse(format!("could not derive name for {}", path.display()))
     })?;
 
     let has_config = config_path(server_dir, &resolved_name, crate::models::ConfigKind::Json)
@@ -129,8 +129,8 @@ pub async fn enable_plugin(server_dir: &str, plugin_name: &str) -> Result<PathBu
     let from = disabled_plugins_dir(server_dir).join(format!("{plugin_name}.cs"));
     let to = enabled_plugins_dir(server_dir).join(format!("{plugin_name}.cs"));
     if !from.exists() {
-        return Err(AppError::not_found(format!(
-            "{plugin_name} not found in disabled directory"
+        return Err(AppError::plugin_not_found(format!(
+            "{plugin_name} (in disabled directory)"
         )));
     }
     if let Some(parent) = to.parent() {
@@ -146,8 +146,8 @@ pub async fn disable_plugin(server_dir: &str, plugin_name: &str) -> Result<PathB
     let from = enabled_plugins_dir(server_dir).join(format!("{plugin_name}.cs"));
     let to = disabled_plugins_dir(server_dir).join(format!("{plugin_name}.cs"));
     if !from.exists() {
-        return Err(AppError::not_found(format!(
-            "{plugin_name} not found in enabled directory"
+        return Err(AppError::plugin_not_found(format!(
+            "{plugin_name} (in enabled directory)"
         )));
     }
     if let Some(parent) = to.parent() {
@@ -194,8 +194,8 @@ pub async fn uninstall_plugin(
     }
 
     if removed.is_empty() {
-        return Err(AppError::not_found(format!(
-            "{plugin_name}: not found in plugins or plugins/disabled"
+        return Err(AppError::plugin_not_found(format!(
+            "{plugin_name} (neither plugins/ nor plugins/disabled)"
         )));
     }
 

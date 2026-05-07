@@ -4,6 +4,7 @@ import { deleteServerProfile, testRconConnection } from "@/api/tauriCommands";
 import { useServerStore } from "@/state/serverStore";
 import { useToast } from "@/components/Toast";
 import type { ServerProfile } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 interface Props {
   onEdit: (profile: ServerProfile) => void;
@@ -29,7 +30,7 @@ export default function ServerProfileList({ onEdit }: Props) {
         r.ok ? "ok" : "error",
       );
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     } finally {
       setTesting(null);
     }
@@ -42,7 +43,7 @@ export default function ServerProfileList({ onEdit }: Props) {
       removeLocal(p.id);
       toast.push(`Deleted ${p.name}`, "ok");
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     }
   }
 

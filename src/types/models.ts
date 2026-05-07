@@ -132,3 +132,11 @@ export interface ActivityEntry {
   status: ActivityStatus;
   message: string | null;
 }
+
+/// Wire shape returned from a failing `invoke()` call. Always paired with
+/// {@link formatError} on the frontend so users see a code + message.
+export interface AppErrorWire {
+  code: string;     // e.g. "RCON-001"
+  category: string; // e.g. "RCON"
+  message: string;
+}

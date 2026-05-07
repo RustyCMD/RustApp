@@ -7,6 +7,7 @@ import {
 } from "@/api/tauriCommands";
 import { useToast } from "@/components/Toast";
 import type { SavedCommand } from "@/types/models";
+import { formatError } from "@/lib/errors";
 
 interface Props {
   profileId: string;
@@ -23,7 +24,7 @@ export default function SavedCommands({ profileId, currentInput, onPick }: Props
   const reload = () =>
     listSavedCommands(profileId)
       .then(setItems)
-      .catch((e) => toast.push(String(e), "error"));
+      .catch((e) => toast.push(formatError(e), "error"));
 
   useEffect(() => {
     reload();
@@ -46,7 +47,7 @@ export default function SavedCommands({ profileId, currentInput, onPick }: Props
         ),
       );
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     }
   }
 
@@ -55,7 +56,7 @@ export default function SavedCommands({ profileId, currentInput, onPick }: Props
       await deleteSavedCommand(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
     } catch (e) {
-      toast.push(String(e), "error");
+      toast.push(formatError(e), "error");
     }
   }
 

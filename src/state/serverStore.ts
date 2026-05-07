@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { ServerProfile } from "@/types/models";
 import { getServerProfiles } from "@/api/tauriCommands";
+import { formatError } from "@/lib/errors";
 
 interface ServerState {
   profiles: ServerProfile[];
@@ -37,7 +38,7 @@ export const useServerStore = create<ServerState>()(
             loading: false,
           }));
         } catch (e) {
-          set({ loading: false, error: errorToString(e) });
+          set({ loading: false, error: formatError(e) });
         }
       },
 
@@ -79,8 +80,3 @@ export function useSelectedProfile(): ServerProfile | null {
   return profiles.find((p) => p.id === selectedId) ?? null;
 }
 
-function errorToString(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  return JSON.stringify(e);
-}

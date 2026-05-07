@@ -55,7 +55,7 @@ pub async fn send_command(ip: &str, port: u16, password: &str, command: &str) ->
     let url = build_url(ip, port, password);
     let (mut ws, _resp) = timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(&url))
         .await
-        .map_err(|_| AppError::rcon("connect timed out"))??;
+        .map_err(|_| AppError::RconConnectTimeout)??;
 
     let identifier: i32 = (Instant::now().elapsed().as_micros() & 0x7fff_ffff) as i32;
     let req = RconRequest {
@@ -77,10 +77,10 @@ pub async fn send_command(ip: &str, port: u16, password: &str, command: &str) ->
                 }
             }
         }
-        Err(AppError::rcon("connection closed before response"))
+        Err(AppError::RconClosed)
     })
     .await
-    .map_err(|_| AppError::rcon("response timed out"))??;
+    .map_err(|_| AppError::RconResponseTimeout)??;
 
     let _ = ws.close(None).await;
     Ok(answer)
