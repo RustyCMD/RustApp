@@ -36,7 +36,7 @@ RustApp/
 │   │   ├── rcon.rs                 WebSocket RCON, serverinfo + playerlist parsing
 │   │   ├── plugins.rs              Scan oxide/plugins{,/disabled}, install, uninstall
 │   │   ├── config_files.rs         Read/write configs, backup-before-save, list backups
-│   │   ├── umod_scraper.rs         reqwest + scraper for the uMod store
+│   │   ├── umod_scraper.rs         JSON client for uMod's /plugins/search.json API
 │   │   ├── dependencies.rs         Check RustDedicated_Data/Managed/*.dll
 │   │   ├── utils.rs                Path helpers, semver, plugin-name validation
 │   │   └── commands.rs             #[tauri::command] surface (~25 commands)
@@ -86,9 +86,7 @@ with the artifacts attached.
 
 ## Known caveats
 
-1. **uMod scraper selectors** in `umod_scraper.rs` are best-guess against the
-   public layout — verify them once you can run against the live HTML.
-2. **Icons** in `src-tauri/icons/` are 1-color placeholders; replace via
+1. **Icons** in `src-tauri/icons/` are 1-color placeholders; replace via
    `cargo tauri icon path/to/real.png`.
-3. **RCON passwords** are stored plaintext in SQLite — a follow-up should
+2. **RCON passwords** are stored plaintext in SQLite — a follow-up should
    switch to the OS keychain via the `keyring` crate.

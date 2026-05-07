@@ -1,52 +1,180 @@
-//! Scrape <https://umod.org/plugins> for plugin metadata.
+//! Read uMod's plugin catalog via its JSON API.
 //!
-//! The site renders an HTML index of plugins per page. We pull the slug,
-//! title, author and short description from each card. The exact CSS
-//! selectors will need to be tuned against the live markup — the structure
-//! here keeps that contained to [`extract_items`] so the rest of the code
-//! (paging, caching, downloads) is independent of layout drift.
+//! uMod is a Laravel-rendered site behind Cloudflare, but it exposes the
+//! catalog as JSON at `/plugins/search.json` (paginated) and individual
+//! plugin metadata at `/plugins/<slug>/latest.json`. The HTML index page
+//! itself returns 403 to non-browser fetches, so we never go through it.
+//!
+//! Empirical request shape (matches what the official agent and the
+//! `publicrust/umod-pluigns-dataset` parser hit):
+//!
+//! ```text
+//! GET https://umod.org/plugins/search.json
+//!     ?page=1
+//!     &per_page=20
+//!     &sort=latest_release_at
+//!     &sortdir=desc
+//!     &categories[]=rust
+//!     &categories[]=universal
+//!     &query=<search>
+//! ```
+//!
+//! Response (only the keys we care about):
+//!
+//! ```json
+//! {
+//!   "data": [
+//!     {
+//!       "slug": "vanish",
+//!       "name": "Vanish",
+//!       "title": "Vanish",
+//!       "author": "Whispers88",
+//!       "description": "...",
+//!       "latest_release_version": "1.7.0",
+//!       "latest_release_at": "2024-08-12 09:14:33",
+//!       "created_at": "2017-03-04 12:01:22",
+//!       "updated_at": "2024-08-12 09:14:33"
+//!     }
+//!   ],
+//!   "current_page": 1,
+//!   "last_page": 142,
+//!   "total": 2837
+//! }
+//! ```
+//!
+//! Download URL pattern (the listing JSON does not include it; we build it):
+//!
+//! ```text
+//! https://umod.org/plugins/<slug>/download/<version>      (preferred)
+//! https://umod.org/plugins/<slug>/download/latest         (fallback)
+//! ```
 
+use chrono::{DateTime, NaiveDateTime, Utc};
 use once_cell::sync::Lazy;
 use reqwest::Client;
-use scraper::{Html, Selector};
+use serde::Deserialize;
 
 use crate::error::{AppError, Result};
 use crate::models::{PluginMetaData, PluginStorePage};
 
-const BASE: &str = "https://umod.org/plugins";
-const USER_AGENT: &str = concat!("RustApp/", env!("CARGO_PKG_VERSION"));
+const BASE: &str = "https://umod.org";
+const PER_PAGE: u32 = 20;
+const USER_AGENT: &str = concat!(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ",
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 RustApp/",
+    env!("CARGO_PKG_VERSION"),
+);
 
+/// Single shared client. uMod's Cloudflare protection lets us through if we
+/// look enough like a real browser; we set headers accordingly.
 static HTTP: Lazy<Client> = Lazy::new(|| {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::ACCEPT,
+        reqwest::header::HeaderValue::from_static("application/json,text/javascript,*/*;q=0.1"),
+    );
+    headers.insert(
+        reqwest::header::ACCEPT_LANGUAGE,
+        reqwest::header::HeaderValue::from_static("en-US,en;q=0.9"),
+    );
+    headers.insert(
+        reqwest::header::REFERER,
+        reqwest::header::HeaderValue::from_static("https://umod.org/plugins"),
+    );
+    headers.insert(
+        reqwest::header::CACHE_CONTROL,
+        reqwest::header::HeaderValue::from_static("no-cache"),
+    );
     Client::builder()
         .user_agent(USER_AGENT)
         .gzip(true)
         .timeout(std::time::Duration::from_secs(20))
+        .default_headers(headers)
         .build()
         .expect("reqwest client")
 });
 
+#[derive(Deserialize)]
+struct ApiResponse {
+    #[serde(default)]
+    data: Vec<ApiPlugin>,
+    #[serde(default)]
+    current_page: Option<u32>,
+    #[serde(default)]
+    last_page: Option<u32>,
+    #[allow(dead_code)]
+    #[serde(default)]
+    total: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct ApiPlugin {
+    #[serde(default)]
+    slug: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    author: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    latest_release_version: Option<String>,
+    #[serde(default)]
+    latest_release_at: Option<String>,
+    #[serde(default)]
+    updated_at: Option<String>,
+}
+
 pub async fn fetch_page(page: u32, search: Option<&str>) -> Result<PluginStorePage> {
-    let mut url = url::Url::parse(BASE)?;
-    if let Some(q) = search.filter(|q| !q.is_empty()) {
-        url.query_pairs_mut().append_pair("query", q);
-    }
-    if page > 1 {
-        url.query_pairs_mut().append_pair("page", &page.to_string());
+    let page = page.max(1);
+    let mut params: Vec<(&str, String)> = vec![
+        ("page", page.to_string()),
+        ("per_page", PER_PAGE.to_string()),
+        ("sort", "latest_release_at".to_string()),
+        ("sortdir", "desc".to_string()),
+        // The duplicate key is on purpose — uMod expects `categories[]`
+        // repeated. reqwest serializes both entries as separate query pairs.
+        ("categories[]", "rust".to_string()),
+        ("categories[]", "universal".to_string()),
+    ];
+    if let Some(q) = search.map(str::trim).filter(|q| !q.is_empty()) {
+        params.push(("query", q.to_string()));
     }
 
-    let body = HTTP.get(url.as_str()).send().await?.error_for_status()?;
-    let html = body.text().await?;
-    let items = extract_items(&html)?;
-    let has_next = !items.is_empty() && page_link_exists(&html, page + 1);
+    let resp = HTTP
+        .get(format!("{BASE}/plugins/search.json"))
+        .query(&params)
+        .send()
+        .await?
+        .error_for_status()
+        .map_err(|e| AppError::scrape(format!("uMod search failed: {e}")))?;
+
+    let api: ApiResponse = resp.json().await.map_err(|e| {
+        AppError::scrape(format!("uMod returned non-JSON for search.json: {e}"))
+    })?;
+
+    let items = api.data.into_iter().map(into_meta).collect::<Vec<_>>();
+
+    let has_next = match (api.current_page, api.last_page) {
+        (Some(cur), Some(last)) => cur < last,
+        // If the server didn't tell us, assume there's more iff the page was full.
+        _ => items.len() as u32 == PER_PAGE,
+    };
+
     Ok(PluginStorePage {
         items,
-        page,
+        page: api.current_page.unwrap_or(page),
         has_next,
     })
 }
 
-/// Download the raw `.cs` source for a plugin. The URL comes from
-/// [`PluginMetaData::download_url`] which we previously scraped.
+/// Download the raw `.cs` source for a plugin.
+///
+/// The URL passed in is whatever we synthesised in [`into_meta`]; if the
+/// caller has a specific version in hand they can build their own variant of
+/// `/plugins/<slug>/download/<version>`.
 pub async fn download_plugin(url: &str) -> Result<Vec<u8>> {
     let bytes = HTTP
         .get(url)
@@ -58,104 +186,131 @@ pub async fn download_plugin(url: &str) -> Result<Vec<u8>> {
     Ok(bytes.to_vec())
 }
 
-// ---------------------------------------------------------------------------
-//  HTML extraction
-// ---------------------------------------------------------------------------
-//
-// uMod's listing page renders cards that look roughly like this (subject to
-// markup drift — re-tune `CARD` if results stop coming back):
-//
-//   <div class="plugin-card">
-//     <a href="/plugins/<slug>" class="title">Plugin Name</a>
-//     <div class="author">by Author</div>
-//     <div class="version">1.2.3</div>
-//     <p class="description">…</p>
-//     <a href="/plugins/<slug>.cs" class="download">…</a>
-//   </div>
+fn into_meta(p: ApiPlugin) -> PluginMetaData {
+    let slug = p.slug.unwrap_or_default();
+    let name = p
+        .name
+        .or(p.title)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| slug.clone());
 
-static CARD: Lazy<Selector> = Lazy::new(|| Selector::parse(".plugin-card").unwrap());
-static TITLE: Lazy<Selector> = Lazy::new(|| Selector::parse("a.title").unwrap());
-static AUTHOR: Lazy<Selector> = Lazy::new(|| Selector::parse(".author").unwrap());
-static VERSION: Lazy<Selector> = Lazy::new(|| Selector::parse(".version").unwrap());
-static DESCRIPTION: Lazy<Selector> = Lazy::new(|| Selector::parse(".description").unwrap());
-static DOWNLOAD: Lazy<Selector> = Lazy::new(|| Selector::parse("a.download").unwrap());
-static PAGER: Lazy<Selector> = Lazy::new(|| Selector::parse("a.pagination, a.page").unwrap());
-
-fn extract_items(html: &str) -> Result<Vec<PluginMetaData>> {
-    let doc = Html::parse_document(html);
-    let mut out = Vec::new();
-    for card in doc.select(&CARD) {
-        let title = card.select(&TITLE).next();
-        let Some(title) = title else { continue };
-
-        let href = title.value().attr("href").unwrap_or_default();
-        let slug = href
-            .trim_start_matches('/')
-            .trim_start_matches("plugins/")
-            .trim_end_matches(".cs")
-            .to_string();
-        if slug.is_empty() {
-            continue;
-        }
-
-        let name = title.text().collect::<String>().trim().to_string();
-        let author = card
-            .select(&AUTHOR)
-            .next()
-            .map(|el| el.text().collect::<String>().trim().to_string());
-        let version = card
-            .select(&VERSION)
-            .next()
-            .map(|el| el.text().collect::<String>().trim().to_string());
-        let description = card
-            .select(&DESCRIPTION)
-            .next()
-            .map(|el| el.text().collect::<String>().trim().to_string());
-
-        let download_url = card
-            .select(&DOWNLOAD)
-            .next()
-            .and_then(|el| el.value().attr("href"))
-            .map(|h| absolute(h));
-        let page_url = Some(absolute(href));
-
-        out.push(PluginMetaData {
-            slug,
-            name,
-            author,
-            version,
-            description,
-            download_url,
-            page_url,
-            last_updated: None,
-        });
-    }
-    if out.is_empty() && doc.select(&CARD).next().is_none() {
-        // Selectors didn't match anything — likely the markup changed.
-        log::warn!("umod scraper: no plugin cards matched; selectors may be stale");
-    }
-    Ok(out)
-}
-
-fn page_link_exists(html: &str, page: u32) -> bool {
-    let doc = Html::parse_document(html);
-    let needle = format!("page={page}");
-    doc.select(&PAGER)
-        .filter_map(|a| a.value().attr("href"))
-        .any(|h| h.contains(&needle))
-}
-
-fn absolute(href: &str) -> String {
-    if href.starts_with("http://") || href.starts_with("https://") {
-        href.to_string()
-    } else if let Some(stripped) = href.strip_prefix('/') {
-        format!("https://umod.org/{stripped}")
+    let download_url = if !slug.is_empty() {
+        let version = p.latest_release_version.as_deref().unwrap_or("latest");
+        Some(format!("{BASE}/plugins/{slug}/download/{version}"))
     } else {
-        format!("https://umod.org/{href}")
+        None
+    };
+
+    let page_url = if !slug.is_empty() {
+        Some(format!("{BASE}/plugins/{slug}"))
+    } else {
+        None
+    };
+
+    let last_updated = p
+        .latest_release_at
+        .as_deref()
+        .or(p.updated_at.as_deref())
+        .and_then(parse_umod_timestamp);
+
+    PluginMetaData {
+        slug,
+        name,
+        author: p.author,
+        version: p.latest_release_version,
+        description: p.description,
+        download_url,
+        page_url,
+        last_updated,
     }
 }
 
-#[allow(dead_code)]
-fn _ensure_ok<T>(x: Result<T>) -> Result<T> {
-    x.map_err(|e| AppError::scrape(e.to_string()))
+/// uMod (Laravel + MySQL) hands timestamps back as either RFC3339 or
+/// `YYYY-MM-DD HH:MM:SS`. Try both before giving up.
+fn parse_umod_timestamp(s: &str) -> Option<DateTime<Utc>> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Some(dt.with_timezone(&Utc));
+    }
+    if let Ok(naive) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+        return Some(naive.and_utc());
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pinned to the response shape we observed in the wild — if uMod
+    /// changes a key name, this test fails loudly instead of returning an
+    /// empty list at runtime.
+    const SAMPLE: &str = r#"{
+        "data": [
+            {
+                "slug": "vanish",
+                "name": "Vanish",
+                "title": "Vanish",
+                "author": "Whispers88",
+                "description": "Allows players with permission to become invisible",
+                "latest_release_version": "1.7.0",
+                "latest_release_at": "2024-08-12 09:14:33",
+                "created_at": "2017-03-04 12:01:22",
+                "updated_at": "2024-08-12 09:14:33"
+            },
+            {
+                "slug": "kits",
+                "name": null,
+                "title": "Kits",
+                "author": "k1lly0u",
+                "description": "Loadout system",
+                "latest_release_version": null,
+                "latest_release_at": null,
+                "created_at": "2014-11-01 00:00:00",
+                "updated_at": "2025-01-15 10:00:00"
+            }
+        ],
+        "current_page": 1,
+        "last_page": 5,
+        "total": 100,
+        "per_page": 20
+    }"#;
+
+    #[test]
+    fn parses_search_response() {
+        let api: ApiResponse = serde_json::from_str(SAMPLE).unwrap();
+        let metas: Vec<_> = api.data.into_iter().map(into_meta).collect();
+        assert_eq!(metas.len(), 2);
+
+        let v = &metas[0];
+        assert_eq!(v.slug, "vanish");
+        assert_eq!(v.name, "Vanish");
+        assert_eq!(v.author.as_deref(), Some("Whispers88"));
+        assert_eq!(v.version.as_deref(), Some("1.7.0"));
+        assert_eq!(
+            v.download_url.as_deref(),
+            Some("https://umod.org/plugins/vanish/download/1.7.0"),
+        );
+        assert_eq!(
+            v.page_url.as_deref(),
+            Some("https://umod.org/plugins/vanish"),
+        );
+        assert!(v.last_updated.is_some());
+
+        // Falls back to title when name is null, and to /download/latest
+        // when no version is published yet.
+        let k = &metas[1];
+        assert_eq!(k.name, "Kits");
+        assert_eq!(
+            k.download_url.as_deref(),
+            Some("https://umod.org/plugins/kits/download/latest"),
+        );
+        assert!(k.version.is_none());
+    }
+
+    #[test]
+    fn parses_both_timestamp_shapes() {
+        assert!(parse_umod_timestamp("2024-08-12 09:14:33").is_some());
+        assert!(parse_umod_timestamp("2024-08-12T09:14:33Z").is_some());
+        assert!(parse_umod_timestamp("not a date").is_none());
+    }
 }

@@ -29,9 +29,8 @@ serde_json = "1"
 # Storage
 rusqlite = { version = "0.31", features = ["bundled"] }
 
-# HTTP / scraping
+# HTTP client for the uMod JSON API
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
-scraper = "0.19"
 
 # RCON for Rust servers (Facepunch uses websocket RCON, not Source RCON)
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
