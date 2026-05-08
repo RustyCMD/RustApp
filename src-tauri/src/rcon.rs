@@ -8,6 +8,7 @@
 //! wait for the first matching frame, and return its `Message`.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -21,8 +22,24 @@ use crate::error::{AppError, Result};
 use crate::models::{BanInfo, PlayerInfo, RconTestResult, ServerStatus};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const CLIENT_NAME: &str = "RustApp";
+
+/// Monotonic counter for RCON request identifiers. Critical that this is
+/// **non-zero** — Rust's WebRcon treats `Identifier: 0` as the broadcast /
+/// "no reply expected" value (spontaneous server log lines and chat traffic
+/// are tagged 0), so a request sent with id 0 either gets no reply or
+/// matches a stray broadcast frame. Started at 1 and skips 0 on wrap.
+static NEXT_RCON_ID: AtomicI32 = AtomicI32::new(1);
+
+fn next_identifier() -> i32 {
+    let mut id = NEXT_RCON_ID.fetch_add(1, Ordering::Relaxed);
+    if id == 0 {
+        id = NEXT_RCON_ID.fetch_add(1, Ordering::Relaxed);
+    }
+    // Keep it in the positive i32 range so the JSON looks sane.
+    id & 0x7fff_ffff
+}
 
 /// How long to suppress further RCON calls after an auth failure for a given
 /// profile. Rust's RCON bans the source IP for 300 s once it sees five bad
@@ -156,7 +173,7 @@ async fn send_command_inner(
         .await
         .map_err(|_| AppError::RconConnectTimeout)??;
 
-    let identifier: i32 = (Instant::now().elapsed().as_micros() & 0x7fff_ffff) as i32;
+    let identifier = next_identifier();
     let req = RconRequest {
         identifier,
         message: command,
