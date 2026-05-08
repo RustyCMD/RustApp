@@ -69,6 +69,17 @@ export default function PluginStoreBrowser({
   );
   const hiddenCount = (data?.items.length ?? 0) - visibleItems.length;
 
+  // If every plugin on the current page is already installed (e.g. the user
+  // just installed the last visible card on the page), automatically roll
+  // forward so the grid keeps showing fresh plugins instead of going blank.
+  // Bounded by `data.hasNext` — at the last page we let the empty state show.
+  useEffect(() => {
+    if (loading || !data) return;
+    if (visibleItems.length > 0) return;
+    if (!data.hasNext) return;
+    setPage((p) => p + 1);
+  }, [loading, data, visibleItems.length]);
+
   function applySearch(e: React.FormEvent) {
     e.preventDefault();
     setPage(1);
