@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Search, ShoppingBag } from "lucide-react";
-import { fetchUmodPlugins } from "@/api/tauriCommands";
+import { fetchUmodPlugins, getInstalledPlugins } from "@/api/tauriCommands";
 import { useToast } from "@/components/Toast";
 import PluginCard from "@/components/PluginCard";
 import EmptyState from "@/components/EmptyState";
@@ -19,6 +19,10 @@ export default function PluginStoreBrowser({
   const [draft, setDraft] = useState("");
   const [data, setData] = useState<PluginStorePage | null>(null);
   const [loading, setLoading] = useState(false);
+  // Lowercase plugin names already on disk for the active server. Used to
+  // hide store entries the user has already installed. Empty when no
+  // profile is selected — browsing-only mode shows everything.
+  const [installedNames, setInstalledNames] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let alive = true;
@@ -31,6 +35,39 @@ export default function PluginStoreBrowser({
       alive = false;
     };
   }, [page, search, toast]);
+
+  useEffect(() => {
+    if (!profileId) {
+      setInstalledNames(new Set());
+      return;
+    }
+    let alive = true;
+    getInstalledPlugins(profileId)
+      .then((list) => {
+        if (!alive) return;
+        setInstalledNames(new Set(list.map((p) => p.name.toLowerCase())));
+      })
+      .catch(() => {
+        // Non-fatal — just don't filter. The store still works.
+        if (alive) setInstalledNames(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [profileId]);
+
+  const markInstalled = useCallback((name: string) => {
+    setInstalledNames((prev) => {
+      const next = new Set(prev);
+      next.add(name.toLowerCase());
+      return next;
+    });
+  }, []);
+
+  const visibleItems = (data?.items ?? []).filter(
+    (it) => !installedNames.has(it.name.toLowerCase()),
+  );
+  const hiddenCount = (data?.items.length ?? 0) - visibleItems.length;
 
   function applySearch(e: React.FormEvent) {
     e.preventDefault();
@@ -76,24 +113,38 @@ export default function PluginStoreBrowser({
             </div>
           ))}
         </div>
-      ) : data?.items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <div className="card">
           <EmptyState
             icon={ShoppingBag}
-            title="No results"
+            title={hiddenCount > 0 ? "All on this page already installed" : "No results"}
             description={
-              search
-                ? `Nothing matched "${search}"`
-                : "uMod returned an empty page — selectors may need updating."
+              hiddenCount > 0
+                ? `Hid ${hiddenCount} plugin${hiddenCount === 1 ? "" : "s"} you already have. Try the next page.`
+                : search
+                  ? `Nothing matched "${search}"`
+                  : "uMod returned an empty page — selectors may need updating."
             }
           />
         </div>
       ) : (
-        <div className="plugin-grid">
-          {data?.items.map((p) => (
-            <PluginCard key={p.slug} profileId={profileId} plugin={p} />
-          ))}
-        </div>
+        <>
+          <div className="plugin-grid">
+            {visibleItems.map((p) => (
+              <PluginCard
+                key={p.slug}
+                profileId={profileId}
+                plugin={p}
+                onInstalled={markInstalled}
+              />
+            ))}
+          </div>
+          {hiddenCount > 0 && (
+            <p className="muted small" style={{ marginTop: 12, textAlign: "center" }}>
+              {hiddenCount} plugin{hiddenCount === 1 ? "" : "s"} on this page hidden — already installed.
+            </p>
+          )}
+        </>
       )}
 
       <div className="row" style={{ justifyContent: "center", gap: 12, marginTop: 20 }}>

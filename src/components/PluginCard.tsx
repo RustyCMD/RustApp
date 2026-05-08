@@ -8,9 +8,12 @@ import { formatError } from "@/lib/errors";
 interface Props {
   profileId: string | null;
   plugin: PluginMetaData;
+  /** Called after a successful install with the plugin's resolved name, so
+   *  the store grid can hide it without waiting for a refetch. */
+  onInstalled?: (name: string) => void;
 }
 
-export default function PluginCard({ profileId, plugin }: Props) {
+export default function PluginCard({ profileId, plugin, onInstalled }: Props) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -25,6 +28,7 @@ export default function PluginCard({ profileId, plugin }: Props) {
     try {
       const installed = await installPlugin(profileId, plugin.slug);
       toast.push(`Installed ${installed.name}`, "ok");
+      onInstalled?.(installed.name);
     } catch (e) {
       toast.push(formatError(e), "error");
     } finally {
