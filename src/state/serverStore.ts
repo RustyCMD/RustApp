@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { ServerProfile } from "@/types/models";
-import { getServerProfiles } from "@/api/tauriCommands";
+import { getServerProfiles, syncProfileFromStartBat } from "@/api/tauriCommands";
 import { formatError } from "@/lib/errors";
 
 interface ServerState {
@@ -37,6 +37,31 @@ export const useServerStore = create<ServerState>()(
                 : (profiles[0]?.id ?? null),
             loading: false,
           }));
+
+          // Self-heal: if any profile has no RCON password but its
+          // server_directory has a start.bat with one configured, import it.
+          // Stops the empty-password polling that gets the app's IP banned.
+          const needsSync = profiles.filter((p) => !p.rconPassword);
+          if (needsSync.length > 0) {
+            const updates = await Promise.all(
+              needsSync.map(async (p) => {
+                try {
+                  const imported = await syncProfileFromStartBat(p.id);
+                  return imported ? { ...p, rconPassword: imported } : null;
+                } catch {
+                  return null;
+                }
+              }),
+            );
+            const merged = updates.filter((u): u is ServerProfile => u !== null);
+            if (merged.length > 0) {
+              set((s) => ({
+                profiles: s.profiles.map(
+                  (p) => merged.find((m) => m.id === p.id) ?? p,
+                ),
+              }));
+            }
+          }
         } catch (e) {
           set({ loading: false, error: formatError(e) });
         }

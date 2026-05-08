@@ -220,6 +220,11 @@ export const regenerateStartBat = (profileId: string) =>
 export const deleteLaunchSettings = (profileId: string) =>
   invoke<void>("delete_launch_settings", { profileId });
 
+/** If the profile has no RCON password yet, try pulling one from
+ * `<serverDirectory>/start.bat`. Returns the imported password (or null). */
+export const syncProfileFromStartBat = (profileId: string) =>
+  invoke<string | null>("sync_profile_from_start_bat", { profileId });
+
 // ---------- Local server process lifecycle ----------
 
 export const startServer = (profileId: string) =>

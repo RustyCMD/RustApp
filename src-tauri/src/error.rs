@@ -79,6 +79,19 @@ pub enum AppError {
     #[error("RCON websocket error: {0}")]
     Websocket(#[from] tokio_tungstenite::tungstenite::Error),
 
+    /// The active profile has no `rcon_password` set. Trying to connect
+    /// anyway just produces a stream of bad-password attempts that ban the
+    /// IP for 300 s — better to refuse upfront and tell the user.
+    #[error("RCON password is not set on this profile")]
+    RconNoPassword,
+
+    /// A recent connection for this profile got rejected as "incorrect
+    /// password," and we're inside the cooldown window. Returning early
+    /// keeps polling consumers from racing into the server's 5-attempts-
+    /// then-ban threshold. Cleared by updating the profile.
+    #[error("RCON paused after a wrong-password reply — fix the profile password and try again")]
+    RconAuthSuspended,
+
     // ----- Plugins (PLUGIN-xxx) -----
     #[error("invalid plugin name: {0:?}")]
     InvalidPluginName(String),
@@ -173,6 +186,8 @@ impl AppError {
             AppError::RconResponseTimeout    => "RCON-002",
             AppError::RconClosed             => "RCON-003",
             AppError::Websocket(_)           => "RCON-004",
+            AppError::RconNoPassword         => "RCON-005",
+            AppError::RconAuthSuspended      => "RCON-006",
 
             AppError::InvalidPluginName(_)   => "PLUGIN-001",
             AppError::PluginNotFound(_)      => "PLUGIN-002",

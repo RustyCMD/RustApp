@@ -166,41 +166,34 @@ async fn run(
         .await
         .map_err(|e| err(InstallStage::Prepare, format!("create dir: {e}")))?;
 
-    let already_installed = install_dir.join("RustDedicated.exe").exists();
+    // Treat the directory as resumable if it already contains any of the
+    // top-level markers a Rust / SteamCMD install drops at root. Older
+    // versions of this guard kept a hand-rolled allow-list of every file
+    // SteamCMD writes (UnityPlayer.dll, steam_api64.dll, MonoBleedingEdge,
+    // …) — predictably incomplete, and a partial install would get
+    // rejected on retry. The presence of any of these three is unambiguous
+    // evidence that the dir is ours.
+    let looks_like_rust_install = install_dir.join("RustDedicated.exe").exists()
+        || install_dir.join("steamcmd").is_dir()
+        || install_dir.join("steamapps").is_dir();
 
-    // Reject non-empty unrelated dirs so we don't dump SteamCMD into the
-    // user's Documents folder. Allow our own scaffolding (a previous
-    // partial run leaves `steamcmd/`, `RustDedicated_Data/`, `oxide/`
-    // behind — re-running the install over those is fine and expected).
-    if !already_installed {
+    if !looks_like_rust_install {
+        // Empty is fine; non-empty + unrelated is not (don't dump SteamCMD
+        // into someone's Documents folder).
         let mut entries = tokio::fs::read_dir(&install_dir)
             .await
             .map_err(|e| err(InstallStage::Prepare, format!("read dir: {e}")))?;
-        while let Some(entry) = entries
+        if entries
             .next_entry()
             .await
             .map_err(|e| err(InstallStage::Prepare, format!("read dir: {e}")))?
+            .is_some()
         {
-            let name = entry.file_name();
-            let s = name.to_string_lossy();
-            let known = matches!(
-                s.as_ref(),
-                "steamcmd"
-                    | "RustDedicated.exe"
-                    | "RustDedicated_Data"
-                    | "oxide"
-                    | "server"
-                    | "logs"
-                    | "Bundles"
-                    | "Managed"
-            );
-            if !known {
-                return Err(err(
-                    InstallStage::Prepare,
-                    "Install directory is not empty and doesn't look like an existing Rust server. \
-                     Pick an empty folder or an existing install.",
-                ));
-            }
+            return Err(err(
+                InstallStage::Prepare,
+                "Install directory is not empty and doesn't look like an existing Rust server. \
+                 Pick an empty folder or an existing install.",
+            ));
         }
     }
 
@@ -257,87 +250,67 @@ async fn run(
         .to_string_lossy()
         .to_string();
 
-    let mut cmd = Command::new(&steamcmd_exe);
-    cmd.args([
-        "+force_install_dir",
-        install_dir_str.as_str(),
-        "+login",
-        "anonymous",
-        "+app_update",
-        RUST_APPID,
-        "validate",
-        "+quit",
-    ])
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
+    let exe_path = install_dir.join("RustDedicated.exe");
+    let mut last_code: Option<i32> = None;
+    let mut last_tail = String::new();
 
-    // Suppress the SteamCMD console window on Windows. Without this, a CMD
-    // window pops up alongside the app even though we pipe stdio.
-    #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    // SteamCMD self-updates on its first invocation and routinely surfaces
+    // a non-zero parent exit code (1, 7, 8, …) even when the actual app
+    // update either didn't run yet or completed cleanly. Treat the exit
+    // code as advisory: if RustDedicated.exe is on disk we move on; if not,
+    // retry once. By the second run, steamcmd is up-to-date and `+app_update`
+    // runs cleanly. Matches what every steamcmd wrapper script does.
+    for attempt in 1..=2 {
+        let (status, tail) =
+            run_steamcmd(app, &steamcmd_exe, &install_dir_str).await?;
+        last_code = status.code();
+        last_tail = tail;
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| err(InstallStage::RunSteamcmd, format!("spawn steamcmd: {e}")))?;
-
-    let stdout = child.stdout.take().expect("piped stdout");
-    let stderr = child.stderr.take().expect("piped stderr");
-
-    // Keep the last 20 stderr lines so an error event can quote them.
-    let stderr_tail: Arc<AsyncMutex<Vec<String>>> =
-        Arc::new(AsyncMutex::new(Vec::with_capacity(20)));
-
-    let app_o = app.clone();
-    let stdout_task = tokio::spawn(async move {
-        let mut lines = BufReader::new(stdout).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            log_line(&app_o, line, LogStream::Stdout);
-        }
-    });
-    let app_e = app.clone();
-    let tail = stderr_tail.clone();
-    let stderr_task = tokio::spawn(async move {
-        let mut lines = BufReader::new(stderr).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            {
-                let mut t = tail.lock().await;
-                if t.len() >= 20 {
-                    t.remove(0);
-                }
-                t.push(line.clone());
+        if exe_path.exists() {
+            if !status.success() {
+                log_line(
+                    app,
+                    format!(
+                        "[install] SteamCMD exited with code {} but RustDedicated.exe \
+                         is present — continuing.",
+                        last_code
+                            .map(|c| c.to_string())
+                            .unwrap_or_else(|| "?".into()),
+                    ),
+                    LogStream::Stdout,
+                );
             }
-            log_line(&app_e, line, LogStream::Stderr);
+            break;
         }
-    });
 
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| err(InstallStage::RunSteamcmd, format!("await steamcmd: {e}")))?;
-    let _ = stdout_task.await;
-    let _ = stderr_task.await;
-
-    if !status.success() {
-        let tail = stderr_tail.lock().await.join("\n");
-        return Err(err(
-            InstallStage::RunSteamcmd,
-            format!(
-                "SteamCMD exited with code {}.\n{}",
-                status
-                    .code()
-                    .map(|c| c.to_string())
-                    .unwrap_or_else(|| "?".into()),
-                tail,
-            ),
-        ));
+        if attempt < 2 {
+            log_line(
+                app,
+                format!(
+                    "[install] SteamCMD attempt {attempt} did not place \
+                     RustDedicated.exe (exit {}) — retrying. First runs often \
+                     need a self-update pass before +app_update can complete.",
+                    last_code
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "?".into()),
+                ),
+                LogStream::Stdout,
+            );
+        }
     }
 
     // ── 5. Verify ──────────────────────────────────────────────────────────
     stage(app, InstallStage::Verify, "Verifying RustDedicated.exe");
-    if !install_dir.join("RustDedicated.exe").exists() {
+    if !exe_path.exists() {
         return Err(err(
             InstallStage::Verify,
-            "SteamCMD finished but RustDedicated.exe was not created.",
+            format!(
+                "SteamCMD finished (last exit code {}) without producing RustDedicated.exe.\n{}",
+                last_code
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "?".into()),
+                last_tail,
+            ),
         ));
     }
 
@@ -399,6 +372,79 @@ async fn run(
     );
 
     Ok(profile)
+}
+
+/// Run `steamcmd.exe +force_install_dir … +app_update 258550 validate +quit`
+/// once. Returns the child's exit status and the last 20 lines of stderr
+/// (for quoting in error messages). Per-line logs are emitted on the
+/// `install-progress` channel as they arrive.
+async fn run_steamcmd(
+    app: &tauri::AppHandle,
+    steamcmd_exe: &Path,
+    install_dir_str: &str,
+) -> std::result::Result<(std::process::ExitStatus, String), StageErr> {
+    let mut cmd = Command::new(steamcmd_exe);
+    cmd.args([
+        "+force_install_dir",
+        install_dir_str,
+        "+login",
+        "anonymous",
+        "+app_update",
+        RUST_APPID,
+        "validate",
+        "+quit",
+    ])
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+
+    // Suppress the SteamCMD console window on Windows. Without this, a CMD
+    // window pops up alongside the app even though we pipe stdio.
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| err(InstallStage::RunSteamcmd, format!("spawn steamcmd: {e}")))?;
+
+    let stdout = child.stdout.take().expect("piped stdout");
+    let stderr = child.stderr.take().expect("piped stderr");
+
+    // Keep the last 20 stderr lines so an error event can quote them.
+    let stderr_tail: Arc<AsyncMutex<Vec<String>>> =
+        Arc::new(AsyncMutex::new(Vec::with_capacity(20)));
+
+    let app_o = app.clone();
+    let stdout_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            log_line(&app_o, line, LogStream::Stdout);
+        }
+    });
+    let app_e = app.clone();
+    let tail = stderr_tail.clone();
+    let stderr_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            {
+                let mut t = tail.lock().await;
+                if t.len() >= 20 {
+                    t.remove(0);
+                }
+                t.push(line.clone());
+            }
+            log_line(&app_e, line, LogStream::Stderr);
+        }
+    });
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| err(InstallStage::RunSteamcmd, format!("await steamcmd: {e}")))?;
+    let _ = stdout_task.await;
+    let _ = stderr_task.await;
+
+    let tail_text = stderr_tail.lock().await.join("\n");
+    Ok((status, tail_text))
 }
 
 async fn install_oxide(app: &tauri::AppHandle, install_dir: &Path) -> Result<(), StageErr> {

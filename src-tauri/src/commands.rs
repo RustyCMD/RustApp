@@ -41,7 +41,12 @@ pub fn update_server_profile(
     db: State<'_, Db>,
     profile: ServerProfile,
 ) -> Result<ServerProfile> {
-    db.update_profile(profile)
+    let updated = db.update_profile(profile)?;
+    // The user just edited the profile — most likely fixing a wrong RCON
+    // password. Clear the cooldown so the next RCON call goes out
+    // immediately instead of waiting out the 60 s suspension.
+    rcon::clear_auth_failure(&updated.id);
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -66,7 +71,7 @@ pub async fn test_rcon_connection(
     profile_id: String,
 ) -> Result<RconTestResult> {
     let p = require_profile(&db, &profile_id)?;
-    let r = rcon::test_connection(&p.ip_address, p.rcon_port, &p.rcon_password).await?;
+    let r = rcon::test_connection(&profile_id, &p.ip_address, p.rcon_port, &p.rcon_password).await?;
     let _ = activity::record(
         &db,
         Some(&profile_id),
@@ -86,7 +91,7 @@ pub async fn send_rcon_command(
 ) -> Result<RconCommandResult> {
     let p = require_profile(&db, &profile_id)?;
     let started = Instant::now();
-    let response = rcon::send_command(&p.ip_address, p.rcon_port, &p.rcon_password, &command).await?;
+    let response = rcon::send_command(&profile_id, &p.ip_address, p.rcon_port, &p.rcon_password, &command).await?;
     let elapsed_ms = started.elapsed().as_millis() as u64;
     let _ = activity::record(
         &db,
@@ -109,7 +114,7 @@ pub async fn get_server_status(
     profile_id: String,
 ) -> Result<ServerStatus> {
     let p = require_profile(&db, &profile_id)?;
-    rcon::get_server_status(&p.ip_address, p.rcon_port, &p.rcon_password).await
+    rcon::get_server_status(&profile_id, &p.ip_address, p.rcon_port, &p.rcon_password).await
 }
 
 #[tauri::command]
@@ -118,13 +123,13 @@ pub async fn get_player_list(
     profile_id: String,
 ) -> Result<Vec<PlayerInfo>> {
     let p = require_profile(&db, &profile_id)?;
-    rcon::get_player_list(&p.ip_address, p.rcon_port, &p.rcon_password).await
+    rcon::get_player_list(&profile_id, &p.ip_address, p.rcon_port, &p.rcon_password).await
 }
 
 #[tauri::command]
 pub async fn get_bans(db: State<'_, Db>, profile_id: String) -> Result<Vec<BanInfo>> {
     let p = require_profile(&db, &profile_id)?;
-    rcon::get_bans(&p.ip_address, p.rcon_port, &p.rcon_password).await
+    rcon::get_bans(&profile_id, &p.ip_address, p.rcon_port, &p.rcon_password).await
 }
 
 #[tauri::command]
@@ -138,6 +143,7 @@ pub async fn unban_player(
     }
     let p = require_profile(&db, &profile_id)?;
     let response = rcon::send_command(
+        &profile_id,
         &p.ip_address,
         p.rcon_port,
         &p.rcon_password,
@@ -178,6 +184,7 @@ pub async fn enable_plugin(
     plugins::enable_plugin(&p.server_directory, &plugin_name).await?;
     // Best-effort live reload.
     let _ = rcon::send_command(
+        &profile_id,
         &p.ip_address,
         p.rcon_port,
         &p.rcon_password,
@@ -195,6 +202,7 @@ pub async fn disable_plugin(
 ) -> Result<()> {
     let p = require_profile(&db, &profile_id)?;
     let _ = rcon::send_command(
+        &profile_id,
         &p.ip_address,
         p.rcon_port,
         &p.rcon_password,
@@ -213,6 +221,7 @@ pub async fn reload_plugin(
 ) -> Result<String> {
     let p = require_profile(&db, &profile_id)?;
     rcon::send_command(
+        &profile_id,
         &p.ip_address,
         p.rcon_port,
         &p.rcon_password,
@@ -230,6 +239,7 @@ pub async fn uninstall_plugin(
 ) -> Result<Vec<String>> {
     let p = require_profile(&db, &profile_id)?;
     let _ = rcon::send_command(
+        &profile_id,
         &p.ip_address,
         p.rcon_port,
         &p.rcon_password,
@@ -370,17 +380,53 @@ pub async fn install_plugin(
         .as_deref()
         .ok_or(AppError::StoreNoDownloadUrl)?;
 
-    let bytes = umod_scraper::download_plugin(url).await?;
     let plugin_name = meta.name.clone();
-    let path = plugins::install_plugin_file(&p.server_directory, &plugin_name, &bytes).await?;
+    let bytes = match umod_scraper::download_plugin(url).await {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = activity::record(
+                &db,
+                Some(&profile_id),
+                "plugin.install",
+                Some(&plugin_name),
+                ActivityStatus::Error,
+                Some(&format!("download: {e}")),
+            );
+            return Err(e);
+        }
+    };
+    let path = match plugins::install_plugin_file(&p.server_directory, &plugin_name, &bytes).await {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = activity::record(
+                &db,
+                Some(&profile_id),
+                "plugin.install",
+                Some(&plugin_name),
+                ActivityStatus::Error,
+                Some(&format!("write: {e}")),
+            );
+            return Err(e);
+        }
+    };
 
     let _ = rcon::send_command(
+        &profile_id,
         &p.ip_address,
         p.rcon_port,
         &p.rcon_password,
         &format!("oxide.load {plugin_name}"),
     )
     .await;
+
+    let _ = activity::record(
+        &db,
+        Some(&profile_id),
+        "plugin.install",
+        Some(&plugin_name),
+        ActivityStatus::Ok,
+        Some(&format!("{} bytes", bytes.len())),
+    );
 
     Ok(InstalledPlugin {
         name: plugin_name,
@@ -425,6 +471,7 @@ pub async fn update_all_plugins(
             let bytes = umod_scraper::download_plugin(&url).await?;
             plugins::install_plugin_file(&p.server_directory, &u.plugin_name, &bytes).await?;
             let _ = rcon::send_command(
+                &profile_id,
                 &p.ip_address,
                 p.rcon_port,
                 &p.rcon_password,
@@ -525,6 +572,7 @@ pub async fn install_local_plugin(
         plugins::install_local_plugin(&p.server_directory, Path::new(&source_path)).await?;
 
     let _ = rcon::send_command(
+        &profile_id,
         &p.ip_address,
         p.rcon_port,
         &p.rcon_password,
@@ -639,6 +687,44 @@ pub async fn regenerate_start_bat(
 #[tauri::command]
 pub fn delete_launch_settings(db: State<'_, Db>, profile_id: String) -> Result<()> {
     launch_settings::delete(&db, &profile_id)
+}
+
+/// Pull the RCON password out of `<serverDirectory>/start.bat` and write it
+/// back to the profile if the profile's password is currently blank.
+///
+/// Returns `Some(password)` when we updated the profile, `None` when there
+/// was nothing to do (file missing, password already set, or start.bat had
+/// no `+rcon.password` line). The frontend calls this on app startup for
+/// every profile with an empty password so users with a hand-written
+/// start.bat don't have to retype credentials, and so the empty-password
+/// guard in `rcon::send_command` doesn't keep returning RCON-005.
+#[tauri::command]
+pub async fn sync_profile_from_start_bat(
+    db: State<'_, Db>,
+    profile_id: String,
+) -> Result<Option<String>> {
+    let p = require_profile(&db, &profile_id)?;
+    if !p.rcon_password.is_empty() {
+        return Ok(None);
+    }
+    let Some(extracted) = launch_settings::extract_rcon_password(&p.server_directory).await? else {
+        return Ok(None);
+    };
+    let updated = ServerProfile {
+        rcon_password: extracted.clone(),
+        ..p
+    };
+    db.update_profile(updated)?;
+    rcon::clear_auth_failure(&profile_id);
+    let _ = activity::record(
+        &db,
+        Some(&profile_id),
+        "profile.sync_from_start_bat",
+        None,
+        ActivityStatus::Ok,
+        Some("imported rcon.password from start.bat"),
+    );
+    Ok(Some(extracted))
 }
 
 // ---------------------------------------------------------------------------

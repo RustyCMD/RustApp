@@ -174,15 +174,37 @@ pub async fn fetch_page(page: u32, search: Option<&str>) -> Result<PluginStorePa
 /// The URL passed in is whatever we synthesised in [`into_meta`]; if the
 /// caller has a specific version in hand they can build their own variant of
 /// `/plugins/<slug>/download/<version>`.
+///
+/// **Why this streams instead of calling `.bytes()`:** uMod's download
+/// endpoint advertises a `Content-Length` larger than the body it actually
+/// sends (verified empirically — header says 45181, server sends 31612 of
+/// valid C# that ends cleanly at the namespace's closing brace). Browsers
+/// and curl tolerate the mismatch, but reqwest's `.bytes()` treats a short
+/// body as a fatal `IncompleteBody` error and throws away the buffer — which
+/// is why every plugin install was failing silently. We work around it by
+/// reading the chunked stream and accepting a premature EOF *iff* we've
+/// already received some content. A truly empty response still propagates.
 pub async fn download_plugin(url: &str) -> Result<Vec<u8>> {
-    let bytes = HTTP
-        .get(url)
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
-    Ok(bytes.to_vec())
+    let mut resp = HTTP.get(url).send().await?.error_for_status()?;
+    let mut buf: Vec<u8> = Vec::new();
+    loop {
+        match resp.chunk().await {
+            Ok(Some(b)) => buf.extend_from_slice(&b),
+            Ok(None) => break,
+            Err(e) => {
+                if buf.is_empty() {
+                    // Nothing arrived — that's a real network failure.
+                    return Err(AppError::HttpRequest(e));
+                }
+                // Some bytes already in buf → uMod's Content-Length lie.
+                // The .cs we got is the real one; downstream parse will
+                // catch any genuinely-corrupt download with PLUGIN-003.
+                log::warn!("download_plugin: tolerating premature EOF for {url}: {e}");
+                break;
+            }
+        }
+    }
+    Ok(buf)
 }
 
 fn into_meta(p: ApiPlugin) -> PluginMetaData {

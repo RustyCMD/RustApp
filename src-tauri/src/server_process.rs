@@ -297,6 +297,7 @@ pub async fn stop_server(
     // RCON-ready (just started, wrong password, etc.) we'll still fall
     // through to the kill below.
     let _ = rcon::send_command(
+        &profile_id,
         &profile.ip_address,
         profile.rcon_port,
         &profile.rcon_password,

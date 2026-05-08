@@ -7,6 +7,8 @@
 //! defaults that mirror `Z:\RustServer\start.bat`). That way the user gets
 //! a sane `start.bat` even if they never opened the launch-settings form.
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use rusqlite::{params, OptionalExtension};
 
 use crate::database::Db;
@@ -214,6 +216,34 @@ pub fn render_start_bat(profile: &ServerProfile, s: &LaunchSettings) -> String {
     out.push_str("\r\n");
     out.push_str("echo Server has stopped.\r\n");
     out
+}
+
+/// `+rcon.password "<value>"` (preferred) or `+rcon.password <value>` from
+/// a hand-written start.bat. Captures both quoted and unquoted forms; for
+/// unquoted values, stops at whitespace or the trailing `^` line-continuation.
+static RCON_PASSWORD_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"\+rcon\.password\s+(?:"([^"]+)"|(\S+?)(?:\s|\^|$))"#)
+        .expect("RCON_PASSWORD_RE")
+});
+
+/// Read `<server_directory>/start.bat` and pull out the RCON password if one
+/// is configured. Returns `Ok(None)` when the file is missing or doesn't
+/// contain `+rcon.password`. Used by [`crate::commands::sync_profile_from_start_bat`]
+/// so a user with a hand-written start.bat doesn't have to retype the
+/// password into the profile.
+pub async fn extract_rcon_password(server_directory: &str) -> Result<Option<String>> {
+    let bat = std::path::Path::new(server_directory).join("start.bat");
+    let text = match tokio::fs::read_to_string(&bat).await {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+    let caps = match RCON_PASSWORD_RE.captures(&text) {
+        Some(c) => c,
+        None => return Ok(None),
+    };
+    let password = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str().trim().to_string());
+    Ok(password.filter(|s| !s.is_empty()))
 }
 
 pub async fn write_start_bat(profile: &ServerProfile, settings: &LaunchSettings) -> Result<()> {

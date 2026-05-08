@@ -106,6 +106,7 @@ pub fn run() {
             commands::save_launch_settings,
             commands::regenerate_start_bat,
             commands::delete_launch_settings,
+            commands::sync_profile_from_start_bat,
             // local server process lifecycle
             server_process::start_server,
             server_process::stop_server,

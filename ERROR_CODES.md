@@ -54,6 +54,8 @@ preserves the OS-level reason.
 | `RCON-002`  | Connected but no matching reply within 5s. Server is alive but slow / busy / wedged. |
 | `RCON-003`  | Server closed the connection before our reply arrived. Often: wrong RCON password (server rejects then closes). |
 | `RCON-004`  | TLS / frame parsing error from `tokio-tungstenite`. |
+| `RCON-005`  | Profile's `rcon_password` is empty. Set the password on the profile (or let the app pull it from `start.bat`) before any RCON call. |
+| `RCON-006`  | An auth-failure cooldown is active for this profile. A recent connection was rejected as "incorrect password" and further calls are paused for 60 s to avoid Rust's 5-attempts-then-IP-ban guard. Cleared by updating the profile. |
 
 ## PLUGIN — installed plugins
 

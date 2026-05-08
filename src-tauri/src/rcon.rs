@@ -7,9 +7,12 @@
 //! and `Type` (e.g. `"Generic"`, `"Warning"`, `"Chat"`). We send a command,
 //! wait for the first matching frame, and return its `Message`.
 
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
@@ -20,6 +23,45 @@ use crate::models::{BanInfo, PlayerInfo, RconTestResult, ServerStatus};
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
 const CLIENT_NAME: &str = "RustApp";
+
+/// How long to suppress further RCON calls after an auth failure for a given
+/// profile. Rust's RCON bans the source IP for 300 s once it sees five bad
+/// passwords in a row — pollers like the dashboard, the topbar, and the
+/// players page can easily produce that burst on a single profile switch
+/// when the saved password is wrong. A 60 s cooldown keeps a single bad
+/// reply from cascading into a ban.
+const AUTH_FAIL_COOLDOWN: Duration = Duration::from_secs(60);
+
+/// Per-profile timestamp of the last `RconClosed` (= bad password) reply.
+/// Cleared by [`note_auth_success`] on a clean response and by
+/// [`clear_auth_failure`] when the user updates the profile.
+static AUTH_FAIL_AT: Lazy<Mutex<HashMap<String, Instant>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn auth_suspended(profile_id: &str) -> bool {
+    let map = AUTH_FAIL_AT.lock().expect("auth-fail mutex");
+    matches!(map.get(profile_id), Some(t) if t.elapsed() < AUTH_FAIL_COOLDOWN)
+}
+
+fn note_auth_failure(profile_id: &str) {
+    AUTH_FAIL_AT
+        .lock()
+        .expect("auth-fail mutex")
+        .insert(profile_id.to_string(), Instant::now());
+}
+
+fn note_auth_success(profile_id: &str) {
+    AUTH_FAIL_AT
+        .lock()
+        .expect("auth-fail mutex")
+        .remove(profile_id);
+}
+
+/// Public hook so `commands::update_server_profile` can wipe the cooldown
+/// when the user fixes the password.
+pub fn clear_auth_failure(profile_id: &str) {
+    note_auth_success(profile_id);
+}
 
 #[derive(Serialize)]
 struct RconRequest<'a> {
@@ -43,15 +85,72 @@ struct RconResponse {
 }
 
 fn build_url(ip: &str, port: u16, password: &str) -> String {
-    // Rust accepts the password as a path segment.
-    let pw = url::form_urlencoded::byte_serialize(password.as_bytes()).collect::<String>();
+    // Rust's RCON server takes the URL path segment as the literal password
+    // — it does **not** percent-decode before comparing to `rcon.password`.
+    // Form-encoding (the previous implementation) would turn `!` into `%21`
+    // on the wire, the server would compare `Yelena%21` to `Yelena!`, and
+    // every connection would fail as "incorrect password". So we encode the
+    // bare minimum required for the URL parser to accept the URL: space, `?`
+    // (query delim), `#` (fragment delim), and control characters. Common
+    // password punctuation (`!`, `@`, `$`, `%`, `&`, `*`, `+`, etc.) passes
+    // through verbatim.
+    let mut pw = String::with_capacity(password.len());
+    for b in password.bytes() {
+        match b {
+            b' ' | b'?' | b'#' | b'/' | b'\\' | 0..=0x1f | 0x7f => {
+                pw.push_str(&format!("%{b:02X}"))
+            }
+            // Non-ASCII bytes have to be percent-encoded for any reasonable
+            // URL parser. If a user's password contains them the server
+            // won't match either way, but we at least produce a parseable URL.
+            0x80..=0xff => pw.push_str(&format!("%{b:02X}")),
+            _ => pw.push(b as char),
+        }
+    }
     format!("ws://{ip}:{port}/{pw}")
 }
 
 /// Connect, send a command, return the first matching response. Connection is
 /// closed before returning. Suitable for fire-and-forget commands like
 /// `oxide.load`/`oxide.unload`/`oxide.reload`.
-pub async fn send_command(ip: &str, port: u16, password: &str, command: &str) -> Result<String> {
+///
+/// `profile_id` keys the per-profile auth-failure cooldown — pass the same
+/// value the caller looked the profile up by. If the profile is currently
+/// in cooldown after a recent bad-password reply, this returns
+/// [`AppError::RconAuthSuspended`] without dialing the server.
+pub async fn send_command(
+    profile_id: &str,
+    ip: &str,
+    port: u16,
+    password: &str,
+    command: &str,
+) -> Result<String> {
+    if password.is_empty() {
+        return Err(AppError::RconNoPassword);
+    }
+    if auth_suspended(profile_id) {
+        return Err(AppError::RconAuthSuspended);
+    }
+
+    let result = send_command_inner(ip, port, password, command).await;
+    match &result {
+        Ok(_) => note_auth_success(profile_id),
+        // Facepunch closes the websocket immediately on a wrong password,
+        // which surfaces here as RconClosed. Trip the breaker so concurrent
+        // pollers (TopBar, Dashboard, Players) don't all blow through the
+        // server's 5-attempts-then-ban threshold on the same bad creds.
+        Err(AppError::RconClosed) => note_auth_failure(profile_id),
+        _ => {}
+    }
+    result
+}
+
+async fn send_command_inner(
+    ip: &str,
+    port: u16,
+    password: &str,
+    command: &str,
+) -> Result<String> {
     let url = build_url(ip, port, password);
     let (mut ws, _resp) = timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(&url))
         .await
@@ -87,9 +186,14 @@ pub async fn send_command(ip: &str, port: u16, password: &str, command: &str) ->
 }
 
 /// Cheap probe — runs `version`, returns latency + reply text on success.
-pub async fn test_connection(ip: &str, port: u16, password: &str) -> Result<RconTestResult> {
+pub async fn test_connection(
+    profile_id: &str,
+    ip: &str,
+    port: u16,
+    password: &str,
+) -> Result<RconTestResult> {
     let started = Instant::now();
-    match send_command(ip, port, password, "version").await {
+    match send_command(profile_id, ip, port, password, "version").await {
         Ok(reply) => Ok(RconTestResult {
             ok: true,
             server_response: Some(reply),
@@ -105,8 +209,13 @@ pub async fn test_connection(ip: &str, port: u16, password: &str) -> Result<Rcon
 
 /// Run `serverinfo`. Rust returns JSON, but we keep the raw text too in case
 /// the server responds with the older textual format.
-pub async fn get_server_status(ip: &str, port: u16, password: &str) -> Result<ServerStatus> {
-    let raw = send_command(ip, port, password, "serverinfo").await?;
+pub async fn get_server_status(
+    profile_id: &str,
+    ip: &str,
+    port: u16,
+    password: &str,
+) -> Result<ServerStatus> {
+    let raw = send_command(profile_id, ip, port, password, "serverinfo").await?;
     let mut status = ServerStatus {
         raw: raw.clone(),
         ..Default::default()
@@ -130,8 +239,13 @@ pub async fn get_server_status(ip: &str, port: u16, password: &str) -> Result<Se
 /// Run `banlistex`. Rust answers with a JSON array of bans. Older
 /// installs print a CSV-ish text format which we don't try to parse —
 /// callers should expect an empty list there and use `Console` instead.
-pub async fn get_bans(ip: &str, port: u16, password: &str) -> Result<Vec<BanInfo>> {
-    let raw = send_command(ip, port, password, "banlistex").await?;
+pub async fn get_bans(
+    profile_id: &str,
+    ip: &str,
+    port: u16,
+    password: &str,
+) -> Result<Vec<BanInfo>> {
+    let raw = send_command(profile_id, ip, port, password, "banlistex").await?;
     let v: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(_) => return Ok(vec![]),
@@ -172,8 +286,13 @@ pub async fn get_bans(ip: &str, port: u16, password: &str) -> Result<Vec<BanInfo
 
 /// Run `playerlist`. Rust answers with a JSON array — we tolerate either
 /// `SteamID` or `SteamId` casing and missing fields.
-pub async fn get_player_list(ip: &str, port: u16, password: &str) -> Result<Vec<PlayerInfo>> {
-    let raw = send_command(ip, port, password, "playerlist").await?;
+pub async fn get_player_list(
+    profile_id: &str,
+    ip: &str,
+    port: u16,
+    password: &str,
+) -> Result<Vec<PlayerInfo>> {
+    let raw = send_command(profile_id, ip, port, password, "playerlist").await?;
     let v: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(_) => return Ok(vec![]),
