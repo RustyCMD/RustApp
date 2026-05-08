@@ -181,7 +181,10 @@ async fn send_command_inner(
     };
     ws.send(Message::Text(serde_json::to_string(&req)?)).await?;
 
-    let answer = timeout(RESPONSE_TIMEOUT, async {
+    // Phase 1: wait for our identifier-matched reply. Many commands return
+    // their full output here (`playerlist`, `serverinfo`, `version`).
+    let mut broadcasts: Vec<String> = Vec::new();
+    let matched = timeout(RESPONSE_TIMEOUT, async {
         while let Some(frame) = ws.next().await {
             let msg = frame?;
             if let Message::Text(text) = msg {
@@ -189,7 +192,13 @@ async fn send_command_inner(
                     if resp.identifier == identifier {
                         return Ok::<String, AppError>(resp.message);
                     }
-                    // Otherwise this is an unrelated broadcast (chat etc.) — keep reading.
+                    // Hold non-matching frames in case the matched reply
+                    // turns out to be empty — for commands like `oxide.reload`
+                    // the server acks immediately with an empty matched
+                    // frame and prints the actual output as broadcasts.
+                    if !resp.message.is_empty() {
+                        broadcasts.push(resp.message);
+                    }
                 }
             }
         }
@@ -197,6 +206,30 @@ async fn send_command_inner(
     })
     .await
     .map_err(|_| AppError::RconResponseTimeout)??;
+
+    let answer = if !matched.trim().is_empty() {
+        // Got real content on the matched frame — return immediately, no
+        // extra latency for the common path.
+        matched
+    } else {
+        // Empty matched ack. Give the server up to BROADCAST_GRACE for any
+        // async broadcast frames carrying the actual output (oxide.reload
+        // usage, kick reasons, etc.). Concatenate everything we collected.
+        const BROADCAST_GRACE: Duration = Duration::from_millis(1500);
+        let _ = timeout(BROADCAST_GRACE, async {
+            while let Some(frame) = ws.next().await {
+                if let Ok(Message::Text(text)) = frame {
+                    if let Ok(resp) = serde_json::from_str::<RconResponse>(&text) {
+                        if !resp.message.is_empty() {
+                            broadcasts.push(resp.message);
+                        }
+                    }
+                }
+            }
+        })
+        .await;
+        broadcasts.join("\n")
+    };
 
     let _ = ws.close(None).await;
     Ok(answer)
