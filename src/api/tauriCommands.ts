@@ -14,6 +14,7 @@ import type {
   InstallArgs,
   InstallProgress,
   InstalledPlugin,
+  LaunchSettings,
   PlayerInfo,
   PluginMetaData,
   PluginStorePage,
@@ -21,8 +22,10 @@ import type {
   RconCommandResult,
   RconTestResult,
   SavedCommand,
+  ServerLogEvent,
   ServerProfile,
   ServerProfileInput,
+  ServerStateEvent,
   ServerStatus,
   WipeSchedule,
 } from "@/types/models";
@@ -202,3 +205,34 @@ export const installRustServer = (args: InstallArgs) =>
 /** Subscribe to install progress events. Returns an unlisten function. */
 export const onInstallProgress = (cb: (p: InstallProgress) => void): Promise<UnlistenFn> =>
   listen<InstallProgress>("install-progress", (e) => cb(e.payload));
+
+// ---------- Launch settings (per-profile start.bat parameters) ----------
+
+export const getLaunchSettings = (profileId: string) =>
+  invoke<LaunchSettings>("get_launch_settings", { profileId });
+
+export const saveLaunchSettings = (settings: LaunchSettings) =>
+  invoke<LaunchSettings>("save_launch_settings", { settings });
+
+export const regenerateStartBat = (profileId: string) =>
+  invoke<void>("regenerate_start_bat", { profileId });
+
+export const deleteLaunchSettings = (profileId: string) =>
+  invoke<void>("delete_launch_settings", { profileId });
+
+// ---------- Local server process lifecycle ----------
+
+export const startServer = (profileId: string) =>
+  invoke<void>("start_server", { profileId });
+
+export const stopServer = (profileId: string) =>
+  invoke<void>("stop_server", { profileId });
+
+export const getRunningServers = () =>
+  invoke<string[]>("get_running_servers");
+
+export const onServerState = (cb: (e: ServerStateEvent) => void): Promise<UnlistenFn> =>
+  listen<ServerStateEvent>("server-state", (e) => cb(e.payload));
+
+export const onServerLog = (cb: (e: ServerLogEvent) => void): Promise<UnlistenFn> =>
+  listen<ServerLogEvent>("server-log", (e) => cb(e.payload));

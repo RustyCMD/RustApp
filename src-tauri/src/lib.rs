@@ -9,10 +9,12 @@ mod database;
 mod dependencies;
 mod error;
 mod installer;
+mod launch_settings;
 mod models;
 mod plugins;
 mod rcon;
 mod saved_commands;
+mod server_process;
 mod umod_scraper;
 mod utils;
 mod wipe_schedule;
@@ -43,7 +45,9 @@ pub fn run() {
             activity::migrate(&db)?;
             saved_commands::migrate(&db)?;
             wipe_schedule::migrate(&db)?;
+            launch_settings::migrate(&db)?;
             app.manage(db);
+            app.manage(server_process::ServerProcesses::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -97,6 +101,15 @@ pub fn run() {
             commands::import_profiles_from_path,
             // local server install
             installer::install_rust_server,
+            // launch settings (per-profile start.bat parameters)
+            commands::get_launch_settings,
+            commands::save_launch_settings,
+            commands::regenerate_start_bat,
+            commands::delete_launch_settings,
+            // local server process lifecycle
+            server_process::start_server,
+            server_process::stop_server,
+            server_process::get_running_servers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -92,6 +92,14 @@ preserves the OS-level reason.
 | `IMPORT-001`  | The file passed to `import_profiles_from_path` isn't a valid RustApp export. The message has the JSON parse error. |
 | `IMPORT-002`  | The export was written by a newer version of RustApp than this one. Upgrade and try again. |
 
+## SERVER — local Rust dedicated server process
+
+| Code           | Meaning |
+|----------------|---------|
+| `SERVER-001`   | `RustDedicated.exe` is missing from the configured `serverDirectory`. The install is incomplete or the path is wrong. |
+| `SERVER-002`   | Tried to start a server that's already tracked as running for this profile. |
+| `SERVER-003`   | `cmd.exe /c start.bat` failed to spawn — bat missing, permissions, or unrelated OS error. |
+
 ## INPUT — invalid command argument
 
 | Code         | Meaning |

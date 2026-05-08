@@ -13,11 +13,12 @@ use crate::config_files;
 use crate::database::Db;
 use crate::dependencies;
 use crate::error::{AppError, Result};
+use crate::launch_settings;
 use crate::models::{
     BanInfo, BulkUpdateFailure, BulkUpdateResult, ConfigBackup, ConfigKind, DependencyStatus,
-    InstalledPlugin, PlayerInfo, PluginMetaData, PluginStorePage, PluginUpdateInfo,
-    ProfileExport, RconCommandResult, RconTestResult, SavedCommand, ServerProfile,
-    ServerProfileInput, ServerStatus, WipeSchedule,
+    InstalledPlugin, LaunchSettings, PlayerInfo, PluginMetaData, PluginStorePage,
+    PluginUpdateInfo, ProfileExport, RconCommandResult, RconTestResult, SavedCommand,
+    ServerProfile, ServerProfileInput, ServerStatus, WipeSchedule,
 };
 use crate::plugins;
 use crate::rcon;
@@ -596,6 +597,48 @@ pub fn mark_wiped_now(
 #[tauri::command]
 pub fn delete_wipe_schedule(db: State<'_, Db>, profile_id: String) -> Result<()> {
     wipe_schedule::delete(&db, &profile_id)
+}
+
+// ---------------------------------------------------------------------------
+//  Launch settings (per-profile start.bat parameters)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_launch_settings(
+    db: State<'_, Db>,
+    profile_id: String,
+) -> Result<LaunchSettings> {
+    let p = require_profile(&db, &profile_id)?;
+    launch_settings::effective(&db, &p)
+}
+
+#[tauri::command]
+pub async fn save_launch_settings(
+    db: State<'_, Db>,
+    settings: LaunchSettings,
+) -> Result<LaunchSettings> {
+    let p = require_profile(&db, &settings.profile_id)?;
+    launch_settings::upsert(&db, &settings)?;
+    // Best-effort regen so the on-disk start.bat reflects what's in the DB.
+    // If the install dir doesn't exist yet, swallow the IO error — the next
+    // Start click will retry.
+    let _ = launch_settings::write_start_bat(&p, &settings).await;
+    Ok(settings)
+}
+
+#[tauri::command]
+pub async fn regenerate_start_bat(
+    db: State<'_, Db>,
+    profile_id: String,
+) -> Result<()> {
+    let p = require_profile(&db, &profile_id)?;
+    let s = launch_settings::effective(&db, &p)?;
+    launch_settings::write_start_bat(&p, &s).await
+}
+
+#[tauri::command]
+pub fn delete_launch_settings(db: State<'_, Db>, profile_id: String) -> Result<()> {
+    launch_settings::delete(&db, &profile_id)
 }
 
 // ---------------------------------------------------------------------------

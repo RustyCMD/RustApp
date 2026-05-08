@@ -125,6 +125,20 @@ pub enum AppError {
     )]
     ImportVersionTooNew(u32),
 
+    // ----- Local server process (SERVER-xxx) -----
+    /// `RustDedicated.exe` doesn't exist in the configured `serverDirectory`.
+    /// Usually means the install was deleted or the path is wrong.
+    #[error("RustDedicated.exe not found at {0}")]
+    ServerExeMissing(String),
+
+    /// A start was requested for a profile that's already tracked as running.
+    #[error("server is already running for profile {0}")]
+    ServerAlreadyRunning(String),
+
+    /// `cmd.exe /c start.bat` failed to spawn (bat missing, permissions, …).
+    #[error("failed to start server: {0}")]
+    ServerSpawnFailed(String),
+
     // ----- Generic input (INPUT-xxx) -----
     #[error("invalid input: {0}")]
     InvalidInput(String),
@@ -177,6 +191,10 @@ impl AppError {
             AppError::ImportParse(_)         => "IMPORT-001",
             AppError::ImportVersionTooNew(_) => "IMPORT-002",
 
+            AppError::ServerExeMissing(_)    => "SERVER-001",
+            AppError::ServerAlreadyRunning(_) => "SERVER-002",
+            AppError::ServerSpawnFailed(_)   => "SERVER-003",
+
             AppError::InvalidInput(_)        => "INPUT-001",
 
             AppError::Internal(_)            => "INTERNAL-001",
@@ -205,6 +223,9 @@ impl AppError {
     pub fn invalid_ini(msg: impl Into<String>) -> Self { Self::InvalidIni(msg.into()) }
     pub fn store_non_json(msg: impl Into<String>) -> Self { Self::StoreNonJson(msg.into()) }
     pub fn import_parse(msg: impl Into<String>) -> Self { Self::ImportParse(msg.into()) }
+    pub fn server_exe_missing(msg: impl Into<String>) -> Self { Self::ServerExeMissing(msg.into()) }
+    pub fn server_already_running(msg: impl Into<String>) -> Self { Self::ServerAlreadyRunning(msg.into()) }
+    pub fn server_spawn_failed(msg: impl Into<String>) -> Self { Self::ServerSpawnFailed(msg.into()) }
     #[allow(dead_code)]
     pub fn internal(msg: impl Into<String>) -> Self { Self::Internal(msg.into()) }
 }

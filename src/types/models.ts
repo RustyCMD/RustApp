@@ -184,3 +184,48 @@ export type InstallProgress =
   | { kind: "done"; profileId: string }
   | { kind: "error"; stage: InstallStage; message: string }
   | { kind: "warning"; stage: InstallStage; message: string };
+
+// ───────────────────── Launch settings (start.bat params) ───────────────────
+
+export interface LaunchSettings {
+  profileId: string;
+  identity: string;
+  hostname: string;
+  description: string;
+  url: string;
+  headerImage: string;
+  serverIp: string;
+  serverPort: number;
+  queryPort: number;
+  appPort: number;
+  maxPlayers: number;
+  worldsize: number;
+  seed: number;
+  /** Map preset — `Procedural Map`, `Barren`, `HapisIsland`, `SavasIsland_koth`, etc. */
+  level: string;
+  saveInterval: number;
+  tickrate: number;
+  globalChat: boolean;
+  salt: number;
+  /** Free-form extra args appended to RustDedicated.exe's command line. */
+  extraArgs: string;
+}
+
+// ───────────────────── Local server process events ──────────────────────────
+
+export type ServerLifecycleState = "starting" | "running" | "stopped" | "exited";
+
+export interface ServerStateEvent {
+  profileId: string;
+  state: ServerLifecycleState;
+  /** Set on `exited`. */
+  code: number | null;
+  /** Set on `running`. */
+  pid: number | null;
+}
+
+export interface ServerLogEvent {
+  profileId: string;
+  line: string;
+  stream: "stdout" | "stderr";
+}

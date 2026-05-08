@@ -5,8 +5,14 @@ import TopBar from "@/components/layout/TopBar";
 import { ToastProvider } from "@/components/Toast";
 import { useServerStore } from "@/state/serverStore";
 import { useInstallStore } from "@/state/installStore";
+import { useServerProcessStore } from "@/state/serverProcessStore";
 import { applyThemeToHtml, useThemeStore } from "@/state/themeStore";
-import { onInstallProgress } from "@/api/tauriCommands";
+import {
+  getRunningServers,
+  onInstallProgress,
+  onServerLog,
+  onServerState,
+} from "@/api/tauriCommands";
 import Dashboard from "@/pages/Dashboard";
 import Settings from "@/pages/Settings";
 import InstalledPluginsPage from "@/pages/InstalledPlugins";
@@ -39,6 +45,33 @@ export default function App() {
     return () => {
       cancelled = true;
       unlisten?.();
+    };
+  }, []);
+
+  // Global listeners for the local-server process lifecycle. Same rationale
+  // as the install listener: the Console tab can be unmounted while the
+  // server is running, but the store keeps accumulating logs/state so when
+  // the user comes back the buffer is intact.
+  useEffect(() => {
+    let unState: (() => void) | undefined;
+    let unLog: (() => void) | undefined;
+    let cancelled = false;
+    onServerState((e) => useServerProcessStore.getState().applyState(e)).then((un) => {
+      if (cancelled) un();
+      else unState = un;
+    });
+    onServerLog((e) => useServerProcessStore.getState().applyLog(e)).then((un) => {
+      if (cancelled) un();
+      else unLog = un;
+    });
+    // Seed from anything that was already running (rare, but: dev reloads).
+    getRunningServers()
+      .then((ids) => useServerProcessStore.getState().hydrateRunning(ids))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unState?.();
+      unLog?.();
     };
   }, []);
 

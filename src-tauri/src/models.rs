@@ -219,6 +219,35 @@ pub struct BanInfo {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+/// All the parameters the Rust dedicated server is launched with — the
+/// pieces that end up baked into a generated `start.bat`. Stored 1:1 per
+/// `ServerProfile` in the `launch_settings` table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchSettings {
+    pub profile_id: String,
+    pub identity: String,
+    pub hostname: String,
+    pub description: String,
+    pub url: String,
+    pub header_image: String,
+    pub server_ip: String,
+    pub server_port: u16,
+    pub query_port: u16,
+    pub app_port: u16,
+    pub max_players: u32,
+    pub worldsize: u32,
+    pub seed: u32,
+    /// Map preset — `Procedural Map`, `Barren`, `HapisIsland`, `SavasIsland_koth`, etc.
+    pub level: String,
+    pub save_interval: u32,
+    pub tickrate: u32,
+    pub global_chat: bool,
+    pub salt: u32,
+    /// Free-form extra args appended verbatim to the RustDedicated.exe line.
+    pub extra_args: String,
+}
+
 /// User-configured wipe cadence for one server. `next_wipe_at` is computed
 /// at fetch time from `last_wipe_at + cadence_days` so the frontend doesn't
 /// need to repeat the math.
