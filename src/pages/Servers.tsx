@@ -159,8 +159,9 @@ function ServerCard({
         ) : (
           <CardStat
             icon={CircleAlert}
-            text={probe?.error ?? "RCON unreachable"}
+            text="Server offline"
             tone="bad"
+            title={probe?.error ?? undefined}
           />
         )}
       </div>
@@ -192,14 +193,17 @@ function CardStat({
   icon: Icon,
   text,
   tone,
+  title,
 }: {
   icon: typeof Wifi;
   text: string;
   tone?: "bad";
+  title?: string;
 }) {
   return (
     <div
       className="row"
+      title={title}
       style={{
         gap: 8,
         color: tone === "bad" ? "var(--bad)" : "var(--text-muted)",
