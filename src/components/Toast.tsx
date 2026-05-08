@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { CheckCircle2, AlertCircle, Info } from "lucide-react";
 
 type Tone = "ok" | "error" | "info";
@@ -23,8 +30,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((t) => [...t, { id, tone, text }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
   }, []);
+  // Memoise the context object so consumers don't get a fresh reference on
+  // every provider render. Otherwise useEffects that list `toast` in their
+  // deps (PluginStoreBrowser, ConfigFileEditor, Players, …) re-fire on
+  // every toast push and every auto-dismiss tick — that's why the Plugin
+  // Store was reloading after each install.
+  const value = useMemo(() => ({ push }), [push]);
   return (
-    <ToastCtx.Provider value={{ push }}>
+    <ToastCtx.Provider value={value}>
       {children}
       <div className="toast-stack">
         {toasts.map((t) => {
